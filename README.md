@@ -1,8 +1,8 @@
-# Gov Grant Feed
+# TTI Funding Opportunities Feed
 
-A self-hosted daily feed that scrapes government grant/proposal
-opportunities from Grants.gov, SAM.gov, and FMCSA and displays
-them in a searchable, filterable UI.
+A self-hosted daily feed that scrapes government grant and funding
+opportunities from Grants.gov and displays them in a searchable,
+filterable UI built for Texas A&M Transportation Institute.
 
 ---
 
@@ -14,23 +14,32 @@ npm install
 ```
 
 ### 2. Configure environment
-Edit `.env`:
+
+Create a `.env` file in the project root:
+
 ```env
 PORT=3000
-
-# Cron schedule (default = midnight every day)
 CRON_SCHEDULE=0 0 * * *
-
-# For testing every minute use:
-# CRON_SCHEDULE=*/1 * * * *
+SESSION_SECRET=your_secret_here
 ```
+
+**Generating a secure `SESSION_SECRET`:**
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+Copy the output and paste it as the value of `SESSION_SECRET`.
+
+> ⚠️ **Never share or commit your `.env` file.**
+> The `SESSION_SECRET` is used to sign login session cookies.
+> If someone obtains it they can forge sessions and log in as any user.
+> Always use a long random string — never use the default placeholder.
 
 ### 3. Start the server
 ```bash
 # Production
 npm start
 
-# Development (auto-restart)
+# Development (auto-restart on file changes)
 npm run dev
 ```
 
@@ -39,97 +48,139 @@ npm run dev
 http://localhost:3000
 ```
 
+### 5. Create your account
+- On first load you'll be redirected to the login page
+- Click **Create Account**
+- The **first account created is automatically an admin**
+- All subsequent accounts are regular users
+
+---
+
+## File Structure
+
+```
+gov-grant-feed/
+│
+├── server.js           ← Express server + cron scheduler
+├── db.js               ← JSON file database layer
+├── .env                ← Environment config (never commit this)
+│
+├── scrapers/
+│   ├── index.js        ← Runs all scrapers + upserts results
+│   └── grants_gov.js   ← Grants.gov search2 API scraper
+│
+├── routes/
+│   ├── api.js          ← Feed/grants API endpoints
+│   └── auth.js         ← Login/register/profile endpoints
+│
+├── public/
+│   ├── index.html      ← Main feed page
+│   ├── login.html      ← Login / register page
+│   ├── profile.html    ← User profile editor
+│   ├── admin.html      ← Admin user management
+│   ├── app.js          ← Frontend JavaScript
+│   └── styles.css      ← Styles
+│
+├── grants.json         ← Grant data (auto-created)
+├── users.json          ← User accounts (auto-created)
+├── interests.json      ← Interest records (auto-created)
+└── sessions/           ← Login sessions (auto-created)
+```
+
+---
+
+## Data Files
+
+| File | Contents | Backup? |
+|---|---|---|
+| `grants.json` | All scraped grant opportunities + fetch logs | Optional |
+| `users.json` | User accounts with hashed passwords | ✅ Yes |
+| `interests.json` | Who is interested in which grants | ✅ Yes |
+| `sessions/` | Active login sessions — expire after 7 days | No |
+
+> Passwords are **never stored in plain text** — they are hashed
+> with bcrypt before saving.
+
+---
+
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `PORT` | No | Server port (default: `3000`) |
+| `SESSION_SECRET` | **Yes** | Secret key for signing session cookies — must be long and random |
+| `CRON_SCHEDULE` | No | Cron expression for scrape schedule (default: midnight daily) |
+
 ---
 
 ## Cron Schedule Reference
 
-| Schedule          | Expression      |
-|-------------------|-----------------|
-| Every minute      | `*/1 * * * *`   |
-| Every 5 minutes   | `*/5 * * * *`   |
-| Every hour        | `0 * * * *`     |
-| Midnight daily    | `0 0 * * *`     |
-| 6 AM daily        | `0 6 * * *`     |
-| Mon–Fri at 8 AM   | `0 8 * * 1-5`   |
+| Schedule | Expression |
+|---|---|
+| Every minute (testing) | `*/1 * * * *` |
+| Every hour | `0 * * * *` |
+| Midnight daily | `0 0 * * *` |
+| 6 AM daily | `0 6 * * *` |
+| Mon–Fri at 8 AM | `0 8 * * 1-5` |
 
 ---
 
 ## API Endpoints
 
-| Method | Endpoint                  | Description                        |
-|--------|---------------------------|------------------------------------|
-| GET    | `/api/opportunities`      | List all opportunities (paginated) |
-| GET    | `/api/opportunities/:id`  | Get a single opportunity           |
-| GET    | `/api/sources`            | Source names + counts              |
-| GET    | `/api/stats`              | Summary stats                      |
-| GET    | `/api/logs`               | Fetch run history                  |
-| POST   | `/api/refresh`            | Manually trigger a scrape          |
+All endpoints require login except `/auth/*`.
 
-### Query Parameters for `/api/opportunities`
-| Param    | Default      | Description                          |
-|----------|--------------|--------------------------------------|
-| `page`   | `1`          | Page number                          |
-| `limit`  | `20`         | Results per page (max 100)           |
-| `search` | —            | Text search (title/summary/agency)   |
-| `source` | —            | Filter by source name                |
-| `sort`   | `fetched_at` | `fetched_at` or `close_date`         |
+### Auth
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/auth/register` | Create account |
+| POST | `/auth/login` | Log in |
+| POST | `/auth/logout` | Log out |
+| GET | `/auth/me` | Current session info |
+| GET | `/auth/profile` | Get your profile |
+| PUT | `/auth/profile` | Update your profile |
+| PUT | `/auth/password` | Change your password |
+| GET | `/auth/users` | List all users (admin only) |
+| DELETE | `/auth/users/:id` | Delete a user (admin only) |
+| PUT | `/auth/users/:id/role` | Change a user's role (admin only) |
+
+### Grants
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/opportunities` | List grants (paginated, filterable) |
+| GET | `/api/opportunities/:id` | Single grant with interested users |
+| GET | `/api/agencies` | All agencies with counts |
+| GET | `/api/stats` | Summary stats |
+| GET | `/api/logs` | Scrape run history |
+| POST | `/api/refresh` | Trigger a manual scrape |
+| POST | `/api/opportunities/:id/interest` | Toggle interest on a grant |
+| GET | `/api/opportunities/:id/interest` | List users interested in a grant |
+| GET | `/api/my-interests` | All grants you're interested in |
 
 ---
 
-## Adding More Sources
+## `.gitignore`
 
-Create a new file in `scrapers/`, for example `scrapers/dot_gov.js`:
+Make sure this file exists so sensitive data is never committed:
 
-```js
-const axios = require("axios");
-
-async function fetchDOT() {
-  const results = [];
-  // ... your scraping logic ...
-  return results; // array of opportunity objects
-}
-
-module.exports = { fetchDOT };
 ```
-
-Then register it in `scrapers/index.js`:
-
-```js
-const { fetchDOT } = require("./dot_gov");
-
-const sources = [
-  { name: "Grants.gov",  fn: () => fetchGrantsGov() },
-  { name: "FMCSA",       fn: () => fetchFMCSA() },
-  { name: "DOT",         fn: () => fetchDOT() },   // <-- add here
-];
-```
-
-Each result object should have this shape:
-
-```js
-{
-  source:      "DOT",
-  external_id: "unique-string-per-source",
-  title:       "Grant Title",
-  summary:     "Short description...",
-  url:         "https://...",
-  posted_date: "2024-01-15",   // or null
-  close_date:  "2024-03-01",   // or null
-  agency:      "Dept. of Transportation",
-  category:    "Grant",
-  award_floor: "10000",        // string or null
-  award_ceil:  "500000",       // string or null
-}
+node_modules/
+sessions/
+grants.json
+users.json
+interests.json
+.env
 ```
 
 ---
 
-## Notes
+## Troubleshooting
 
-
-- **FMCSA scraping** uses HTML parsing and may break if DOT
-  redesigns their pages. The scraper falls back gracefully.
-- The SQLite database (`grants.db`) is created automatically
-  in the project root on first run.
-- All data is upserted — re-running the scraper won't
-  create duplicates.
+| Problem | Fix |
+|---|---|
+| `npm install` fails | You're on Node v24 — `better-sqlite3` won't compile, but this app uses JSON files so it doesn't matter. Run `npm install` again. |
+| Feed is empty | Click **⟳ Refresh Now** or wait for startup scrape to finish |
+| Redirected to login immediately | Session expired — log in again |
+| Forgot admin password | Open `users.json`, delete your user entry, restart and re-register |
+| Port already in use | Change `PORT=3001` in `.env` |
+| `SESSION_SECRET` warning | Generate a real secret with the command above |
+| Cron not firing | Verify expression at [crontab.guru](https://crontab.guru) |
