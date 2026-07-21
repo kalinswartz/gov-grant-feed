@@ -6,10 +6,8 @@
     <title>TTI Funding Opportunities</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-
   <body>
 
-    <!-- Header -->
     <header>
       <div class="logo">🏛️ TTI Funding Opportunities</div>
       <div class="header-right">
@@ -19,7 +17,6 @@
       </div>
     </header>
 
-    <!-- Main -->
     <div class="container">
 
       <!-- Stats -->
@@ -38,21 +35,27 @@
         </div>
       </div>
 
-      <!-- Controls -->
-      <div class="controls">
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn tab-active" id="tab-feed" onclick="switchTab('feed')">
+          📋 All Grants
+        </button>
+        <button class="tab-btn" id="tab-interests" onclick="switchTab('interests')">
+          ⭐ My Interests
+        </button>
+      </div>
 
+      <!-- Controls -->
+      <div class="controls" id="controls-bar">
         <div class="search-wrap">
           <svg class="search-icon" width="16" height="16" fill="none"
                stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <input
-            type="text"
-            id="search-input"
-            placeholder="Search title, summary, agency..."
-            oninput="debouncedSearch()"
-          />
+          <input type="text" id="search-input"
+                 placeholder="Search title, summary, agency..."
+                 oninput="debouncedSearch()" />
         </div>
 
         <div class="agency-wrap">
@@ -73,7 +76,6 @@
         </select>
 
         <button class="btn-outline btn-sm" onclick="clearFilters()">✕ Clear</button>
-
       </div>
 
       <!-- Feed -->
@@ -102,23 +104,27 @@
         <table class="log-table">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Source</th>
-              <th>Status</th>
-              <th>Count</th>
-              <th>Error</th>
+              <th>Time</th><th>Source</th><th>Status</th><th>Count</th><th>Error</th>
             </tr>
           </thead>
           <tbody id="log-tbody">
-            <tr>
-              <td colspan="5" style="color:var(--muted);text-align:center">Loading...</td>
-            </tr>
+            <tr><td colspan="5" style="color:var(--muted);text-align:center">Loading...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <script src="/app.js"></script>
+    <!-- Interested Users Modal -->
+    <div class="modal-overlay" id="interest-modal" onclick="closeInterestModal(event)">
+      <div class="modal">
+        <h2>
+          <span id="interest-modal-title">Interested Users</span>
+          <button class="modal-close" onclick="closeInterestModal()">✕</button>
+        </h2>
+        <div id="interest-modal-body"></div>
+      </div>
+    </div>
 
+    <script src="/app.js"></script>
   </body>
 </html>

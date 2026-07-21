@@ -1,0 +1,37 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "kalin",
+      "password": "$2a$12$V515jCNhRTNpFMJcEFvCLuBJ9bedm7TuN4u9n9wPZF5rtNmG0MJ/u",
+      "role": "admin",
+      "created_at": "2026-07-21T19:44:44.040Z",
+      "display_name": "Kalin Swartz",
+      "company": "TTI",
+      "job_title": "Graphic Designer I",
+      "department": "Crash Analytics",
+      "email": "kalinswartz@gmail.com",
+      "phone": "(512) 767-8812",
+      "location": "Austin, TX",
+      "bio": "howdy",
+      "updated_at": "2026-07-21T19:55:44.949Z"
+    },
+    {
+      "id": 2,
+      "username": "test",
+      "password": "$2a$12$FBBnN8V4P8ubkmw/hsgJduWFG/mV7stY.J0bkUa6PzeJ5Rojfm/8C",
+      "role": "user",
+      "created_at": "2026-07-21T19:46:56.383Z",
+      "display_name": "Test Account",
+      "company": "",
+      "job_title": "Research Engineer",
+      "department": "",
+      "email": "",
+      "phone": "",
+      "location": "",
+      "bio": "",
+      "updated_at": "2026-07-21T19:47:12.503Z"
+    }
+  ],
+  "next_user_id": 3
+}

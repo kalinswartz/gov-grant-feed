@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TTI Grant Feed — Admin</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .admin-container {
+        max-width: 800px;
+        margin: 40px auto;
+        padding: 24px;
+      }
+
+      .admin-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 32px;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .admin-header h1 {
+        font-size: 1.4rem;
+        color: var(--text);
+      }
+
+      .admin-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+
+      .admin-card h2 {
+        font-size: 1rem;
+        color: var(--text);
+        margin-bottom: 18px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .user-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+      }
+
+      .user-table th {
+        text-align: left;
+        padding: 10px 12px;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        font-size: 0.75rem;
+      }
+
+      .user-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+        vertical-align: middle;
+      }
+
+      .user-table tr:last-child td { border-bottom: none; }
+      .user-table tr:hover td { background: var(--surface2); }
+
+      .role-badge {
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 0.72rem;
+        font-weight: 700;
+      }
+
+      .role-admin {
+        background: rgba(79,142,247,.18);
+        color: var(--accent);
+        border: 1px solid rgba(79,142,247,.35);
+      }
+
+      .role-user {
+        background: rgba(136,144,168,.15);
+        color: var(--muted);
+        border: 1px solid var(--border);
+      }
+
+      .btn-danger {
+        background: transparent;
+        border: 1px solid var(--red);
+        color: var(--red);
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-danger:hover { background: rgba(224,92,92,.15); }
+
+      .btn-role {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-right: 4px;
+      }
+
+      .btn-role:hover { border-color: var(--accent); color: var(--accent); }
+
+      .action-row { display: flex; gap: 6px; align-items: center; }
+
+      .empty-users {
+        text-align: center;
+        padding: 24px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .back-link {
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .back-link:hover { text-decoration: underline; }
+
+      #admin-error {
+        background: rgba(224,92,92,.12);
+        border: 1px solid rgba(224,92,92,.35);
+        color: var(--red);
+        border-radius: var(--radius);
+        padding: 10px 14px;
+        font-size: 0.875rem;
+        margin-bottom: 16px;
+        display: none;
+      }
+
+      #admin-error.show { display: block; }
+    </style>
+  </head>
+
+  <body>
+    <div class="admin-container">
+
+      <div class="admin-header">
+        <h1>⚙️ Admin Panel</h1>
+        <a href="/" class="back-link">← Back to Feed</a>
+      </div>
+
+      <div id="admin-error"></div>
+
+      <!-- User Management -->
+      <div class="admin-card">
+        <h2>👥 User Management</h2>
+        <table class="user-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="user-tbody">
+            <tr>
+              <td colspan="5" class="empty-users">Loading...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <script>
+  var currentUserId = null;
+
+  /* ── Init ── */
+  (async function() {
+    try {
+      var res  = await fetch("/auth/me");
+      var data = await res.json();
+
+      if (!data.loggedIn) {
+        window.location.href = "/login.html";
+        return;
+      }
+
+      if (data.role !== "admin") {
+        window.location.href = "/";
+        return;
+      }
+
+      currentUserId = data.userId;
+      loadUsers();
+    } catch(e) {
+      window.location.href = "/login.html";
+    }
+  })();
+
+  /* ── Load Users ── */
+  async function loadUsers() {
+    try {
+      var res   = await fetch("/auth/users");
+      var users = await res.json();
+
+      if (!res.ok) {
+        showError(users.error || "Failed to load users.");
+        return;
+      }
+
+      var tbody = document.getElementById("user-tbody");
+
+      if (!users.length) {
+        tbody.innerHTML =
+          '<tr><td colspan="5" class="empty-users">No users found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = users.map(function(u) {
+        var isMe = u.id === currentUserId;
+
+        /* ── ID cell ── */
+        var idCell = "<td style='color:var(--muted)'>" + u.id + "</td>";
+
+        /* ── Username cell ── */
+        var usernameCell =
+          "<td><strong>" + escHtml(u.username) + "</strong>" +
+          (isMe ? " <span style='color:var(--muted);font-size:0.75rem'>(you)</span>" : "") +
+          "</td>";
+
+        /* ── Role cell ── */
+        var roleClass    = u.role === "admin" ? "role-admin" : "role-user";
+        var roleCell     =
+          "<td><span class='role-badge " + roleClass + "'>" +
+          escHtml(u.role) + "</span></td>";
+
+        /* ── Created cell ── */
+        var createdCell =
+          "<td style='color:var(--muted);font-size:0.82rem'>" +
+          formatDate(u.created_at) + "</td>";
+
+        /* ── Actions cell ── */
+        var actions = "";
+
+        if (!isMe) {
+          /* Role toggle button */
+          if (u.role === "admin") {
+            actions +=
+              "<button class='btn-role' onclick='setRole(" + u.id + ", \"user\")'>Make User</button>";
+          } else {
+            actions +=
+              "<button class='btn-role' onclick='setRole(" + u.id + ", \"admin\")'>Make Admin</button>";
+          }
+
+          /* Delete button */
+          actions +=
+            "<button class='btn-danger' onclick='deleteUser(" + u.id + ", \"" +
+            escHtml(u.username) + "\")'>Delete</button>";
+        } else {
+          actions = "<span style='color:var(--muted);font-size:0.75rem'>—</span>";
+        }
+
+        var actionsCell = "<td><div class='action-row'>" + actions + "</div></td>";
+
+        return "<tr>" +
+          idCell +
+          usernameCell +
+          roleCell +
+          createdCell +
+          actionsCell +
+          "</tr>";
+      }).join("");
+
+    } catch(err) {
+      showError("Failed to load users: " + err.message);
+    }
+  }
+
+  /* ── Delete User ── */
+  async function deleteUser(id, username) {
+    if (!confirm("Delete user \"" + username + "\"? This cannot be undone.")) return;
+
+    try {
+      var res  = await fetch("/auth/users/" + id, { method: "DELETE" });
+      var data = await res.json();
+
+      if (!res.ok) {
+        showError(data.error || "Delete failed.");
+        return;
+      }
+
+      loadUsers();
+    } catch(err) {
+      showError("Delete failed: " + err.message);
+    }
+  }
+
+  /* ── Set Role ── */
+  async function setRole(id, role) {
+    try {
+      var res  = await fetch("/auth/users/" + id + "/role", {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ role: role }),
+      });
+
+      var data = await res.json();
+
+      if (!res.ok) {
+        showError(data.error || "Role update failed.");
+        return;
+      }
+
+      loadUsers();
+    } catch(err) {
+      showError("Role update failed: " + err.message);
+    }
+  }
+
+  /* ── Helpers ── */
+  function showError(msg) {
+    var el = document.getElementById("admin-error");
+    el.textContent = msg;
+    el.classList.add("show");
+    setTimeout(function() { el.classList.remove("show"); }, 4000);
+  }
+
+  function escHtml(str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function formatDate(isoStr) {
+    if (!isoStr) return "—";
+    try {
+      return new Date(isoStr).toLocaleString(undefined, {
+        month:  "short",
+        day:    "numeric",
+        year:   "numeric",
+        hour:   "2-digit",
+        minute: "2-digit",
+      });
+    } catch(e) { return isoStr; }
+  }
+</script>
+  </body>
+</html>
