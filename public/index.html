@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TTI Funding Opportunities</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+
+  <body>
+
+    <!-- Header -->
+    <header>
+      <div class="logo">🏛️ TTI Funding Opportunities</div>
+      <div class="header-right">
+        <span id="last-updated"></span>
+        <button class="btn-outline btn-sm" onclick="openLogsModal()">📋 Logs</button>
+        <button class="btn-primary btn-sm" id="refresh-btn" onclick="triggerRefresh()">⟳ Refresh Now</button>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <div class="container">
+
+      <!-- Stats -->
+      <div class="stats-bar">
+        <div class="stat-card">
+          <span class="label">Total Opportunities</span>
+          <span class="value" id="stat-total">—</span>
+        </div>
+        <div class="stat-card">
+          <span class="label">New Today</span>
+          <span class="value" id="stat-today">—</span>
+        </div>
+        <div class="stat-card">
+          <span class="label">Grants.gov</span>
+          <span class="value" id="stat-grants">—</span>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+
+        <div class="search-wrap">
+          <svg class="search-icon" width="16" height="16" fill="none"
+               stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="text"
+            id="search-input"
+            placeholder="Search title, summary, agency..."
+            oninput="debouncedSearch()"
+          />
+        </div>
+
+        <div class="agency-wrap">
+          <select id="agency-filter" onchange="onAgencyDropdownChange()">
+            <option value="">All Agencies</option>
+          </select>
+        </div>
+
+        <select id="sort-select" onchange="loadFeed(1)">
+          <option value="fetched_at">Sort: Newest</option>
+          <option value="close_date">Sort: Closing Soon</option>
+        </select>
+
+        <select id="limit-select" onchange="loadFeed(1)">
+          <option value="10">10 / page</option>
+          <option value="20" selected>20 / page</option>
+          <option value="50">50 / page</option>
+        </select>
+
+        <button class="btn-outline btn-sm" onclick="clearFilters()">✕ Clear</button>
+
+      </div>
+
+      <!-- Feed -->
+      <div id="feed">
+        <div class="loading">
+          <div class="spinner"></div>
+          <span>Loading opportunities...</span>
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination" id="pagination"></div>
+
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <!-- Logs Modal -->
+    <div class="modal-overlay" id="logs-modal" onclick="closeLogsModal(event)">
+      <div class="modal">
+        <h2>
+          Fetch Run Logs
+          <button class="modal-close" onclick="closeLogsModal()">✕</button>
+        </h2>
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Source</th>
+              <th>Status</th>
+              <th>Count</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="log-tbody">
+            <tr>
+              <td colspan="5" style="color:var(--muted);text-align:center">Loading...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+
+  </body>
+</html>
