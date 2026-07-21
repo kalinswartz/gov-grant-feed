@@ -144,3 +144,5 @@ vite.config.ts.timestamp-*
 
 sessions/
 grants.json
+interests.json
+users.json
