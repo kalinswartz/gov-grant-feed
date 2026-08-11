@@ -4,6 +4,7 @@ const path = require("path");
 const DB_PATH       = path.join(__dirname, "grants.json");
 const USERS_PATH    = path.join(__dirname, "users.json");
 const INTEREST_PATH = path.join(__dirname, "interests.json");
+const MESSAGES_PATH = path.join(__dirname, "messages.json");  // ← ADD THIS
 
 /* ── Grants DB ── */
 function loadDB() {
@@ -63,6 +64,38 @@ function loadInterests() {
 
 function saveInterests(data) {
   fs.writeFileSync(INTEREST_PATH, JSON.stringify(data, null, 2));
+}
+
+/* ── Messages DB ── NEW */
+function loadMessages() {
+  if (!fs.existsSync(MESSAGES_PATH)) {
+    const empty = {
+      conversations: [],
+      participants:  [],
+      messages:      [],
+      next_convo_id: 1,
+      next_msg_id:   1,
+    };
+    fs.writeFileSync(MESSAGES_PATH, JSON.stringify(empty, null, 2));
+    return empty;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(MESSAGES_PATH, "utf8"));
+  } catch {
+    const empty = {
+      conversations: [],
+      participants:  [],
+      messages:      [],
+      next_convo_id: 1,
+      next_msg_id:   1,
+    };
+    fs.writeFileSync(MESSAGES_PATH, JSON.stringify(empty, null, 2));
+    return empty;
+  }
+}
+
+function saveMessages(data) {
+  fs.writeFileSync(MESSAGES_PATH, JSON.stringify(data, null, 2));
 }
 
 /* ── WHERE clause helper ── */
@@ -246,7 +279,6 @@ const db = {
   ════════════════════════════ */
   interests: {
 
-    // Toggle interest — returns { interested: true/false }
     toggle(userId, opportunityId) {
       const data     = loadInterests();
       const oppIdStr = String(opportunityId);
@@ -255,12 +287,10 @@ const db = {
       );
 
       if (existing >= 0) {
-        // Remove interest
         data.interests.splice(existing, 1);
         saveInterests(data);
         return { interested: false };
       } else {
-        // Add interest
         data.interests.push({
           id:             data.next_id++,
           user_id:        userId,
@@ -272,7 +302,6 @@ const db = {
       }
     },
 
-    // Is a specific user interested in a specific opportunity?
     isInterested(userId, opportunityId) {
       const data = loadInterests();
       return data.interests.some(
@@ -280,7 +309,6 @@ const db = {
       );
     },
 
-    // Get all users interested in an opportunity (with public profiles)
     getInterestedUsers(opportunityId) {
       const data    = loadInterests();
       const oppIdStr = String(opportunityId);
@@ -297,7 +325,6 @@ const db = {
       }).filter(Boolean);
     },
 
-    // Get all opportunities a user is interested in (returns opportunity ids)
     getByUser(userId) {
       const data = loadInterests();
       return data.interests
@@ -305,7 +332,6 @@ const db = {
         .map((i) => i.opportunity_id);
     },
 
-    // Get interest counts for a list of opportunity ids
     getCounts(opportunityIds) {
       const data   = loadInterests();
       const counts = {};
@@ -316,6 +342,295 @@ const db = {
         ).length;
       });
       return counts;
+    },
+  },
+
+  /* ════════════════════════════
+     Messaging methods  ← NEW
+  ════════════════════════════ */
+  messaging: {
+
+    // ── Conversations ──────────────────────────
+
+    findDirectConversation(userIdA, userIdB) {
+  const data = loadMessages();
+
+  const userAConvos = data.participants
+    .filter((p) => p.user_id === userIdA)  // ← no deleted_at filter
+    .map((p) => p.conversation_id);
+
+  const match = userAConvos.find((convId) => {
+    const members   = data.participants.filter((p) => p.conversation_id === convId);
+    const memberIds = members.map((m) => m.user_id);
+    return (
+      memberIds.length === 2 &&
+      memberIds.includes(userIdA) &&
+      memberIds.includes(userIdB)
+    );
+  });
+
+  return match || null;
+},
+
+    getOrCreateConversation(userIdA, userIdB) {
+  const data = loadMessages();
+
+  // Check if conversation already exists (including soft deleted ones)
+  const userAConvos = data.participants
+    .filter((p) => p.user_id === userIdA)  // ← no deleted_at filter here
+    .map((p) => p.conversation_id);
+
+  const match = userAConvos.find((convId) => {
+    const members    = data.participants.filter((p) => p.conversation_id === convId);
+    const memberIds  = members.map((m) => m.user_id);
+    return (
+      memberIds.length === 2 &&
+      memberIds.includes(userIdA) &&
+      memberIds.includes(userIdB)
+    );
+  });
+
+  if (match) {
+  let restored = false;
+  data.participants.forEach((p) => {
+    // use == instead of === to handle string/number mismatch
+    if (p.conversation_id == match && p.deleted_at) {
+      delete p.deleted_at;
+      restored = true;
+    }
+  });
+  if (restored) saveMessages(data);
+  return match;
+}
+
+  // Create new conversation
+  const convId = data.next_convo_id++;
+  data.conversations.push({
+    id:         convId,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+
+  data.participants.push(
+    {
+      conversation_id: convId,
+      user_id:         userIdA,
+      joined_at:       new Date().toISOString(),
+      last_read_at:    new Date().toISOString(),
+    },
+    {
+      conversation_id: convId,
+      user_id:         userIdB,
+      joined_at:       new Date().toISOString(),
+      last_read_at:    new Date().toISOString(),
+    }
+  );
+
+  saveMessages(data);
+  return convId;
+},
+
+    // Get all conversations for a user with last message + unread count
+    getConversationsForUser(userId) {
+      const data = loadMessages();
+
+      // Find all conversation IDs this user is in
+      const myParticipations = data.participants.filter(
+    (p) => p.user_id === userId && !p.deleted_at  // ← ADD !p.deleted_at
+    );
+
+      return myParticipations
+        .map((myPart) => {
+          const convId = myPart.conversation_id;
+          const conv   = data.conversations.find((c) => c.id === convId);
+          if (!conv) return null;
+
+          // Get other participants with their profiles
+          const otherParticipants = data.participants
+            .filter((p) => p.conversation_id === convId && p.user_id !== userId)
+            .map((p) => db.users.getPublicProfile(p.user_id))
+            .filter(Boolean);
+
+          // Get last message
+          const convMessages = data.messages
+            .filter((m) => m.conversation_id === convId && !m.is_deleted)
+            .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+          const lastMessage = convMessages[0] || null;
+
+          // Count unread messages
+          const lastRead  = new Date(myPart.last_read_at || 0);
+          const unread    = convMessages.filter(
+            (m) =>
+              m.sender_id !== userId &&
+              new Date(m.created_at) > lastRead
+          ).length;
+
+          return {
+            id:               convId,
+            created_at:       conv.created_at,
+            updated_at:       conv.updated_at,
+            other_users:      otherParticipants,
+            last_message:     lastMessage,
+            unread_count:     unread,
+          };
+        })
+        .filter(Boolean)
+        // Sort by most recent activity
+        .sort((a, b) => {
+          const aTime = a.last_message?.created_at || a.updated_at;
+          const bTime = b.last_message?.created_at || b.updated_at;
+          return bTime.localeCompare(aTime);
+        });
+    },
+
+    // Check if a user is part of a conversation
+    isParticipant(userId, conversationId) {
+      const data = loadMessages();
+      return data.participants.some(
+        (p) => p.user_id === userId && p.conversation_id === conversationId
+      );
+    },
+
+    // ── Messages ───────────────────────────────
+
+    // Send a message
+    sendMessage(conversationId, senderId, content) {
+      const data = loadMessages();
+
+      // Make sure sender is a participant
+      const isParticipant = data.participants.some(
+        (p) => p.conversation_id === conversationId && p.user_id === senderId
+      );
+      if (!isParticipant) throw new Error("Not a participant in this conversation");
+
+      const msg = {
+        id:              data.next_msg_id++,
+        conversation_id: conversationId,
+        sender_id:       senderId,
+        content:         String(content).trim().slice(0, 5000),
+        created_at:      new Date().toISOString(),
+        edited_at:       null,
+        is_deleted:      false,
+      };
+
+      data.messages.push(msg);
+
+      // Update conversation updated_at
+      const conv = data.conversations.find((c) => c.id === conversationId);
+      if (conv) conv.updated_at = new Date().toISOString();
+
+      saveMessages(data);
+
+      // Return message with sender profile attached
+      return {
+        ...msg,
+        sender: db.users.getPublicProfile(senderId),
+      };
+    },
+
+    // Get messages for a conversation (paginated)
+    getMessages(conversationId, limit = 50, offset = 0) {
+      const data = loadMessages();
+
+      const msgs = data.messages
+        .filter((m) => m.conversation_id === conversationId && !m.is_deleted)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+      const total  = msgs.length;
+      const paged  = msgs.slice(offset, offset + limit);
+
+      // Attach sender profiles
+      const withSenders = paged.map((m) => ({
+        ...m,
+        sender: db.users.getPublicProfile(m.sender_id),
+      }));
+
+      return { messages: withSenders, total };
+    },
+
+    // Edit a message (only sender can edit)
+    editMessage(messageId, userId, newContent) {
+      const data = loadMessages();
+      const msg  = data.messages.find((m) => m.id === messageId);
+
+      if (!msg)                    throw new Error("Message not found");
+      if (msg.sender_id !== userId) throw new Error("Cannot edit someone else's message");
+      if (msg.is_deleted)           throw new Error("Cannot edit a deleted message");
+
+      msg.content   = String(newContent).trim().slice(0, 5000);
+      msg.edited_at = new Date().toISOString();
+
+      saveMessages(data);
+      return { ...msg, sender: db.users.getPublicProfile(msg.sender_id) };
+    },
+
+    // Soft delete a message (only sender can delete)
+    deleteMessage(messageId, userId) {
+      const data = loadMessages();
+      const msg  = data.messages.find((m) => m.id === messageId);
+
+      if (!msg)                    throw new Error("Message not found");
+      if (msg.sender_id !== userId) throw new Error("Cannot delete someone else's message");
+
+      msg.is_deleted = true;
+            msg.deleted_at = new Date().toISOString();
+
+      saveMessages(data);
+      return { success: true };
+    },
+
+    // Mark all messages in a conversation as read for a user
+    markAsRead(conversationId, userId) {
+      const data        = loadMessages();
+      const participant = data.participants.find(
+        (p) => p.conversation_id === conversationId && p.user_id === userId
+      );
+
+      if (!participant) throw new Error("Not a participant in this conversation");
+
+      participant.last_read_at = new Date().toISOString();
+      saveMessages(data);
+      return { success: true };
+    },
+
+    // Get total unread count across ALL conversations for a user
+    getTotalUnread(userId) {
+      const data           = loadMessages();
+      const myParticipations = data.participants.filter(
+        (p) => p.user_id === userId
+      );
+
+      let total = 0;
+      myParticipations.forEach((myPart) => {
+        const lastRead = new Date(myPart.last_read_at || 0);
+        const unread   = data.messages.filter(
+          (m) =>
+            m.conversation_id === myPart.conversation_id &&
+            m.sender_id       !== userId &&
+            !m.is_deleted &&
+            new Date(m.created_at) > lastRead
+        ).length;
+        total += unread;
+      });
+
+      return total;
+    },
+
+    // Soft delete — only hides conversation for the requesting user
+    deleteConversation(conversationId, userId) {
+      const data = loadMessages();
+
+      const participant = data.participants.find(
+        (p) => p.conversation_id === conversationId && p.user_id === userId
+      );
+      if (!participant) throw new Error("Not a participant in this conversation");
+
+      // Just mark this participant as deleted — don't touch other participant
+      participant.deleted_at = new Date().toISOString();
+
+      saveMessages(data);
+      return { success: true };
     },
   },
 

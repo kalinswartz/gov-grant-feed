@@ -194,4 +194,14 @@ router.get("/my-interests", (req, res) => {
   }
 });
 
+// GET /api/users — list all users (for new message modal)
+router.get("/users", function (req, res) {
+  try {
+    var users = db.users.getAll();
+    res.json({ users: users });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

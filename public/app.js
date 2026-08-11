@@ -338,9 +338,14 @@ async function showInterestedUsers(oppId, oppTitle) {
       return '<div class="interest-user-card">' +
         '<div class="interest-avatar">' + escHtml(initial) + '</div>' +
         '<div class="interest-user-info">' +
-          '<div class="interest-user-name">' + escHtml(name) +
+          '<div class="interest-user-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+            escHtml(name) +
             (u.role === "admin"
               ? ' <span class="role-badge-sm">admin</span>'
+              : "") +
+            (u.id !== currentUserId
+              ? ' <button class="btn-outline btn-sm" style="font-size:0.72rem;padding:2px 8px" ' +
+                  'onclick="openMessageFromInterest(' + u.id + ')">💬 Message</button>'
               : "") +
           "</div>" +
           (subtitle.length
@@ -701,4 +706,44 @@ function formatDateTime(isoStr) {
 
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/* ── Messages: unread badge in nav ── */
+async function loadUnreadBadge() {
+  try {
+    var data  = await apiFetch("/api/messages/unread");
+    var badge = document.getElementById("nav-unread-badge");
+    if (!badge) return;
+    if (data.count > 0) {
+      badge.textContent = data.count > 99 ? "99+" : data.count;
+      badge.style.display = "inline-flex";
+    } else {
+      badge.style.display = "none";
+    }
+  } catch(e) {}
+}
+
+// Poll unread count every 30 seconds
+// Call after checkAuth confirms user is logged in
+var _origCheckAuth = checkAuth;
+checkAuth = async function() {
+  await _origCheckAuth();
+  loadUnreadBadge();
+  setInterval(loadUnreadBadge, 30000);
+};
+
+/* ── Message button from Interested Users modal ── */
+async function openMessageFromInterest(targetUserId) {
+  try {
+    var res  = await fetch("/api/messages/conversations", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ target_user_id: targetUserId }),
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed");
+    window.location.href = "/messages.html?conversation=" + data.conversation_id;
+  } catch (err) {
+    showToast("❌ " + err.message, "error");
+  }
 }

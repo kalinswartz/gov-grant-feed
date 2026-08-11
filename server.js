@@ -37,6 +37,9 @@ app.use(session({
 const { router: authRouter, requireAuth } = require("./routes/auth");
 app.use("/auth", authRouter);
 
+const messagesRouter = require("./routes/messages");
+app.use("/api/messages", messagesRouter);
+
 /* ── Protected API routes ── */
 app.use("/api", requireAuth, require("./routes/api"));
 
