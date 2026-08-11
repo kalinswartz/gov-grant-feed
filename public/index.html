@@ -13,10 +13,15 @@
       <div class="header-right">
         <span id="last-updated"></span>
         <button class="btn-outline btn-sm" id="messages-nav-btn" onclick="window.location.href='/messages.html'">
-        💬 Messages <span id="nav-unread-badge" style="display:none" class="unread-badge">0</span>
-        </button>
-        <button class="btn-outline btn-sm" onclick="openLogsModal()">📋 Logs</button>
-        <button class="btn-primary btn-sm" id="refresh-btn" onclick="triggerRefresh()">⟳ Refresh Now</button>
+  💬 <span class="btn-label">Messages</span>
+  <span id="nav-unread-badge" style="display:none" class="unread-badge">0</span>
+</button>
+<button class="btn-outline btn-sm" onclick="openLogsModal()">
+  📋 <span class="btn-label">Logs</span>
+</button>
+<button class="btn-primary btn-sm" id="refresh-btn" onclick="triggerRefresh()">
+  ⟳ <span class="btn-label">Refresh</span>
+</button>
       </div>
     </header>
 
