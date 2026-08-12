@@ -320,11 +320,13 @@ function buildMessageRow(msg, prevMsg) {
     : '<div class="msg-avatar ' + (isOwn ? "" : "other") + '">' +
         escHtml(initial) + "</div>";
 
+
   var bubbleContent;
   if (msg.is_deleted) {
     bubbleContent = '<em style="opacity:0.5;font-size:0.82rem">Message deleted</em>';
   } else {
-    bubbleContent = escHtml(msg.content);
+    // linkify handles escHtml internally so don't double-escape
+    bubbleContent = linkify(msg.content);
   }
 
   row.innerHTML =
@@ -687,4 +689,18 @@ function formatTimeOnly(isoStr) {
       minute: "2-digit",
     });
   } catch (e) { return ""; }
+}
+
+// Convert plain text URLs into clickable links
+function linkify(str) {
+  if (!str) return "";
+  // First escape HTML so we don't have XSS issues
+  var escaped = escHtml(str);
+  // Then convert URLs to anchor tags
+  return escaped.replace(
+    /(https?:\/\/[^\s<>"']+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer" ' +
+      'style="color:inherit;text-decoration:underline;opacity:0.9;word-break:break-all;"' +
+    '>$1</a>'
+  );
 }

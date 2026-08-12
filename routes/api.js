@@ -178,7 +178,7 @@ router.get("/my-interests", (req, res) => {
     if (!oppIds.length) return res.json({ total: 0, results: [] });
 
     // Fetch full opportunity data for each id
-    const results = oppIds.map((id) => {
+    let results = oppIds.map((id) => {
       const opp = db.prepare("SELECT * FROM opportunities WHERE id = ?").get(id);
       if (!opp) return null;
       return {
@@ -187,6 +187,17 @@ router.get("/my-interests", (req, res) => {
         user_interested: true,
       };
     }).filter(Boolean);
+
+    // remove closed grants from interests too
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    results = results.filter((r) => {
+      if (!r.close_date) return true;
+      const close = new Date(r.close_date);
+      if (isNaN(close)) return true;
+      close.setHours(23, 59, 59, 999);
+      return close >= today;
+    });
 
     res.json({ total: results.length, results });
   } catch (err) {

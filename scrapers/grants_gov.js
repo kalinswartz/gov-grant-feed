@@ -233,13 +233,14 @@ async function fetchGrantsGov() {
           title:            opp.title       || "Untitled",
           summary:          buildSummary(opp),
           url:              `https://simpler.grants.gov/opportunity/${id}`,
-          posted_date:      opp.openDate    || null,
-          close_date:       opp.closeDate   || null,
+          posted_date:      normalizeDate(opp.openDate)  || null,
+          close_date:       normalizeDate(opp.closeDate) || null,
           agency:           buildAgencyLabel(opp),
           category:         opp.oppStatus   || null,
           award_floor:      null,
           award_ceil:       null,
           matched_keywords: keyword,
+          aln:              opp.alnist?.join(", ") || null,
         });
       }
     }
@@ -299,8 +300,8 @@ function isTransportationRelated(opp) {
   }
 
   // 5. Check ALN numbers — 20.xxx = DOT programs
-  if (Array.isArray(opp.alnList)) {
-    for (const aln of opp.alnList) {
+  if (Array.isArray(opp.alnist)) {
+    for (const aln of opp.alnist) {
       if (String(aln).startsWith("20.")) return true;
     }
   }
@@ -323,7 +324,7 @@ function buildSummary(opp) {
   if (opp.agencyName)      parts.push(`Agency: ${opp.agencyName}`);
   if (opp.oppStatus)       parts.push(`Status: ${opp.oppStatus}`);
   if (opp.docType)         parts.push(`Type: ${opp.docType}`);
-  if (opp.alnList?.length) parts.push(`ALN: ${opp.alnList.join(", ")}`);
+  if (opp.alnist?.length) parts.push(`ALN: ${opp.alnist.join(", ")}`);
   if (opp.closeDate)       parts.push(`Closes: ${opp.closeDate}`);
   return parts.join(" | ") || "See link for details.";
 }
@@ -345,6 +346,24 @@ function buildInitialTags(opp, keyword) {
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function normalizeDate(dateStr) {
+  if (!dateStr) return null;
+  dateStr = dateStr.trim();
+  if (!dateStr) return null;
+
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+
+  // Convert MM/DD/YYYY → YYYY-MM-DD
+  const parts = dateStr.split("/");
+  if (parts.length === 3) {
+    const [mm, dd, yyyy] = parts;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
+
+  return null;
 }
 
 module.exports = { fetchGrantsGov };

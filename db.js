@@ -133,6 +133,17 @@ function applyFilters(rows, sql, args) {
     );
   }
 
+  // 
+const now = new Date();
+now.setHours(0, 0, 0, 0);
+filtered = filtered.filter((r) => {
+  if (!r.close_date) return true;
+  const close = new Date(r.close_date);
+  if (isNaN(close)) return true;
+  close.setHours(23, 59, 59, 999);
+  return close >= now;
+});
+
   return filtered;
 }
 
@@ -727,15 +738,21 @@ const db = {
         if (sql.includes("FROM opportunities") && !sql.includes("GROUP BY")) {
           let rows = applyFilters([...data.opportunities], sql, args);
 
-          if (sql.includes("close_date DESC")) {
-            rows.sort((a, b) =>
-              (b.close_date || "").localeCompare(a.close_date || "")
-            );
-          } else {
-            rows.sort((a, b) =>
-              (b.fetched_at || "").localeCompare(a.fetched_at || "")
-            );
-          }
+       
+        if (sql.includes("close_date")) {
+          // closing soon = ascending (earliest date first)
+          // put grants with no close_date at the end
+          rows.sort((a, b) => {
+            if (!a.close_date && !b.close_date) return 0;
+            if (!a.close_date) return 1;   // no date → push to end
+            if (!b.close_date) return -1;  // no date → push to end
+            return a.close_date.localeCompare(b.close_date);
+          });
+        } else {
+          rows.sort((a, b) =>
+            (b.fetched_at || "").localeCompare(a.fetched_at || "")
+          );
+        }
 
           const limit  = parseInt(args[args.length - 2]) || 20;
           const offset = parseInt(args[args.length - 1]) || 0;
