@@ -43,6 +43,9 @@ app.use("/api/messages", messagesRouter);
 /* ── Protected API routes ── */
 app.use("/api", requireAuth, require("./routes/api"));
 
+const resumeRouter = require("./routes/resume");
+app.use("/api/resume", requireAuth, resumeRouter);
+
 /* ── Static files ── */
 app.use(express.static(path.join(__dirname, "public")));
 

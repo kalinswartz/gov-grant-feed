@@ -8,6 +8,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.0.0-rc.12",
@@ -15,7 +16,9 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
+    "multer": "^2.2.0",
     "node-cron": "^3.0.3",
+    "pdf2json": "^4.0.3",
     "session-file-store": "^1.5.0"
   },
   "devDependencies": {

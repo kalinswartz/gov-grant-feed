@@ -21,6 +21,7 @@ Create a `.env` file in the project root:
 PORT=3000
 CRON_SCHEDULE=0 0 * * *
 SESSION_SECRET=your_secret_here
+GEMINI_API_KEY=your_gemini_key_here
 ```
 
 **Generating a secure `SESSION_SECRET`:**
@@ -28,6 +29,13 @@ SESSION_SECRET=your_secret_here
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 Copy the output and paste it as the value of `SESSION_SECRET`.
+
+**Getting a Gemini API Key (required for resume parsing)**
+1. Go To aistudio.google.com
+2. Sign in with a Google account
+3. Click "Get API Key" -> "Create API Key"
+4. Copy the key and paste it as GEMINI_API_KEY in your .env
+
 
 > ⚠️ **Never share or commit your `.env` file.**
 > The `SESSION_SECRET` is used to sign login session cookies.
@@ -61,30 +69,35 @@ http://localhost:3000
 ```
 gov-grant-feed/
 │
-├── server.js           ← Express server + cron scheduler
-├── db.js               ← JSON file database layer
-├── .env                ← Environment config (never commit this)
+├── server.js              ← Express server + cron scheduler
+├── db.js                  ← JSON file database layer
+├── .env                   ← Environment config (never commit this)
 │
 ├── scrapers/
-│   ├── index.js        ← Runs all scrapers + upserts results
-│   └── grants_gov.js   ← Grants.gov search2 API scraper
+│   ├── index.js           ← Runs all scrapers + upserts results
+│   └── grants_gov.js      ← Grants.gov search2 API scraper
 │
 ├── routes/
-│   ├── api.js          ← Feed/grants API endpoints
-│   └── auth.js         ← Login/register/profile endpoints
+│   ├── api.js             ← Feed/grants API endpoints
+│   ├── auth.js            ← Login/register/profile endpoints
+│   ├── messages.js        ← Messaging endpoints
+│   └── resume.js          ← Resume upload + AI parsing endpoint
 │
 ├── public/
-│   ├── index.html      ← Main feed page
-│   ├── login.html      ← Login / register page
-│   ├── profile.html    ← User profile editor
-│   ├── admin.html      ← Admin user management
-│   ├── app.js          ← Frontend JavaScript
-│   └── styles.css      ← Styles
+│   ├── index.html         ← Main feed page
+│   ├── login.html         ← Login / register page
+│   ├── profile.html       ← User profile editor + resume upload
+│   ├── admin.html         ← Admin user management
+│   ├── messages.html      ← Messaging inbox
+│   ├── app.js             ← Frontend JavaScript (main feed)
+│   ├── messages.js        ← Frontend JavaScript (messaging)
+│   └── styles.css         ← Styles
 │
-├── grants.json         ← Grant data (auto-created)
-├── users.json          ← User accounts (auto-created)
-├── interests.json      ← Interest records (auto-created)
-└── sessions/           ← Login sessions (auto-created)
+├── grants.json            ← Grant data (auto-created)
+├── users.json             ← User accounts (auto-created)
+├── interests.json         ← Interest records (auto-created)
+├── messages.json          ← Messages + conversations (auto-created)
+└── sessions/              ← Login sessions (auto-created)
 ```
 
 ---
@@ -96,6 +109,7 @@ gov-grant-feed/
 | `grants.json` | All scraped grant opportunities + fetch logs | Optional |
 | `users.json` | User accounts with hashed passwords | ✅ Yes |
 | `interests.json` | Who is interested in which grants | ✅ Yes |
+| `messages.json` | Conversations + messages between users | ✅ Yes |
 | `sessions/` | Active login sessions — expire after 7 days | No |
 
 > Passwords are **never stored in plain text** — they are hashed
@@ -110,7 +124,9 @@ gov-grant-feed/
 | `PORT` | No | Server port (default: `3000`) |
 | `SESSION_SECRET` | **Yes** | Secret key for signing session cookies — must be long and random |
 | `CRON_SCHEDULE` | No | Cron expression for scrape schedule (default: midnight daily) |
+| `GEMINI_API_KEY` | No* | Google Gemini API key for AI resume parsing |
 
+> App runs fine without `GEMINI_API_KEY` - resume upload feature will be disabled. All other features work normally.
 ---
 
 ## Cron Schedule Reference
@@ -123,38 +139,6 @@ gov-grant-feed/
 | 6 AM daily | `0 6 * * *` |
 | Mon–Fri at 8 AM | `0 8 * * 1-5` |
 
----
-
-## API Endpoints
-
-All endpoints require login except `/auth/*`.
-
-### Auth
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/auth/register` | Create account |
-| POST | `/auth/login` | Log in |
-| POST | `/auth/logout` | Log out |
-| GET | `/auth/me` | Current session info |
-| GET | `/auth/profile` | Get your profile |
-| PUT | `/auth/profile` | Update your profile |
-| PUT | `/auth/password` | Change your password |
-| GET | `/auth/users` | List all users (admin only) |
-| DELETE | `/auth/users/:id` | Delete a user (admin only) |
-| PUT | `/auth/users/:id/role` | Change a user's role (admin only) |
-
-### Grants
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/opportunities` | List grants (paginated, filterable) |
-| GET | `/api/opportunities/:id` | Single grant with interested users |
-| GET | `/api/agencies` | All agencies with counts |
-| GET | `/api/stats` | Summary stats |
-| GET | `/api/logs` | Scrape run history |
-| POST | `/api/refresh` | Trigger a manual scrape |
-| POST | `/api/opportunities/:id/interest` | Toggle interest on a grant |
-| GET | `/api/opportunities/:id/interest` | List users interested in a grant |
-| GET | `/api/my-interests` | All grants you're interested in |
 
 ---
 
@@ -168,6 +152,7 @@ sessions/
 grants.json
 users.json
 interests.json
+messages.json
 .env
 ```
 

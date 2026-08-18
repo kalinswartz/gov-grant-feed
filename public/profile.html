@@ -199,6 +199,60 @@
       @media (max-width: 560px) {
         .form-grid { grid-template-columns: 1fr; }
       }
+
+  /* ── Resume Upload ── */
+  .resume-upload-area {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .resume-upload-area:hover,
+  .resume-upload-area.drag-over {
+    border-color: var(--accent);
+    background: rgba(79,142,247,.05);
+  }
+
+  .resume-upload-icon {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    opacity: 0.6;
+  }
+
+  .resume-upload-text {
+    font-size: 0.9rem;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .resume-upload-sub {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .resume-browse-link {
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .resume-preview-field {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 0.88rem;
+    color: var(--text);
+  }
+
+  .resume-preview-field.empty {
+    color: var(--muted);
+    font-style: italic;
+  }
+
     </style>
   </head>
 
@@ -209,6 +263,56 @@
         <h1>👤 My Profile</h1>
         <a href="/" class="back-link">← Back to Feed</a>
       </div>
+
+      <!-- ADD THIS before the existing profile-card div -->
+<div class="profile-card" id="resume-card">
+  <h3>📄 Import from Resume</h3>
+
+  <div id="resume-alert" class="alert"></div>
+
+  <div class="resume-upload-area" id="resume-drop-zone">
+    <div class="resume-upload-icon">📄</div>
+    <div class="resume-upload-text">
+      Drop your resume PDF here, or
+      <label for="resume-file" class="resume-browse-link">browse</label>
+    </div>
+    <div class="resume-upload-sub">PDF only · max 5MB</div>
+    <input
+      type="file"
+      id="resume-file"
+      accept=".pdf"
+      style="display:none"
+      onchange="handleResumeFile(this.files[0])"
+    />
+  </div>
+
+  <!-- Parsing state -->
+  <div id="resume-parsing" style="display:none;text-align:center;padding:20px;color:var(--muted)">
+    <div class="spinner" style="margin:0 auto 12px"></div>
+    <div>Reading your resume with AI...</div>
+  </div>
+
+  <!-- Preview of extracted fields -->
+  <div id="resume-preview" style="display:none">
+    <div style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;padding:10px 12px;
+                background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.2);
+                border-radius:8px">
+      ✨ AI extracted the fields below from your resume.
+      Review them and click <strong>Apply to Profile</strong> to fill in your form.
+    </div>
+
+    <div class="form-grid" id="resume-preview-grid">
+      <!-- filled dynamically -->
+    </div>
+
+    <div class="form-actions" style="margin-top:16px">
+      <button class="btn-outline" onclick="cancelResumePreview()">Cancel</button>
+      <button class="btn-primary" onclick="applyResumeToProfile()">
+        ✅ Apply to Profile
+      </button>
+    </div>
+  </div>
+</div>
 
       <!-- Profile Info Card -->
       <div class="profile-card">
@@ -543,6 +647,179 @@
           });
         } catch(e) { return isoStr; }
       }
+
+      /* ════════════════════════════
+   Resume Upload + AI Parse
+════════════════════════════ */
+var parsedResumeData = null;
+
+/* ── Drag and drop ── */
+(function setupDragDrop() {
+  var zone = document.getElementById("resume-drop-zone");
+  if (!zone) return;
+
+  zone.addEventListener("dragover", function(e) {
+    e.preventDefault();
+    zone.classList.add("drag-over");
+  });
+
+  zone.addEventListener("dragleave", function() {
+    zone.classList.remove("drag-over");
+  });
+
+  zone.addEventListener("drop", function(e) {
+    e.preventDefault();
+    zone.classList.remove("drag-over");
+    var file = e.dataTransfer.files[0];
+    if (file) handleResumeFile(file);
+  });
+
+  // Click anywhere on zone opens file picker
+  zone.addEventListener("click", function(e) {
+    if (e.target.tagName !== "LABEL" && e.target.tagName !== "INPUT") {
+      document.getElementById("resume-file").click();
+    }
+  });
+})();
+
+/* ── Handle file selected ── */
+async function handleResumeFile(file) {
+  if (!file) return;
+
+  if (file.type !== "application/pdf") {
+    showAlert("resume-alert", "Please upload a PDF file.", "error");
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    showAlert("resume-alert", "File too large (max 5MB).", "error");
+    return;
+  }
+
+  // Show parsing spinner, hide upload zone
+  document.getElementById("resume-drop-zone").style.display = "none";
+  document.getElementById("resume-parsing").style.display  = "block";
+  document.getElementById("resume-preview").style.display  = "none";
+  document.getElementById("resume-alert").className        = "alert";
+
+  try {
+    var formData = new FormData();
+    formData.append("resume", file);
+
+    var res  = await fetch("/api/resume/parse", {
+      method: "POST",
+      body:   formData,
+    });
+
+    var data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Parse failed");
+    }
+
+    parsedResumeData = data.profile;
+    showResumePreview(data.profile);
+
+  } catch(err) {
+    document.getElementById("resume-drop-zone").style.display = "";
+    document.getElementById("resume-parsing").style.display  = "none";
+    showAlert("resume-alert", "❌ " + err.message, "error");
+
+    // Reset file input so same file can be re-tried
+    document.getElementById("resume-file").value = "";
+  }
+}
+
+/* ── Show preview of extracted data ── */
+function showResumePreview(profile) {
+  document.getElementById("resume-parsing").style.display = "none";
+  document.getElementById("resume-preview").style.display = "block";
+
+  var grid   = document.getElementById("resume-preview-grid");
+  var fields = [
+    { key: "display_name", label: "Display Name" },
+    { key: "job_title",    label: "Job Title" },
+    { key: "company",      label: "Company" },
+    { key: "department",   label: "Department" },
+    { key: "email",        label: "Email" },
+    { key: "phone",        label: "Phone" },
+    { key: "location",     label: "Location" },
+  ];
+
+  grid.innerHTML = fields.map(function(f) {
+    var val     = profile[f.key] || "";
+    var isEmpty = !val;
+    return (
+      '<div class="form-group">' +
+        '<label>' + f.label + '</label>' +
+        '<div class="resume-preview-field' + (isEmpty ? " empty" : "") + '">' +
+          (val ? escHtml(val) : "Not found") +
+        '</div>' +
+      '</div>'
+    );
+  }).join("") +
+  // Bio full width
+  '<div class="form-group full-width">' +
+    '<label>Bio (AI generated)</label>' +
+    '<div class="resume-preview-field' + (!profile.bio ? " empty" : "") + '" ' +
+         'style="min-height:60px;white-space:pre-wrap">' +
+      (profile.bio ? escHtml(profile.bio) : "Not generated") +
+    '</div>' +
+  '</div>';
+}
+
+/* ── Apply extracted data to profile form ── */
+function applyResumeToProfile() {
+  if (!parsedResumeData) return;
+
+  var p = parsedResumeData;
+
+  // Only fill fields that have values — don't overwrite with empty strings
+  if (p.display_name) setValue("display_name", p.display_name);
+  if (p.job_title)    setValue("job_title",    p.job_title);
+  if (p.company)      setValue("company",      p.company);
+  if (p.department)   setValue("department",   p.department);
+  if (p.email)        setValue("email",        p.email);
+  if (p.phone)        setValue("phone",        p.phone);
+  if (p.location)     setValue("location",     p.location);
+  if (p.bio)          setValue("bio",          p.bio);
+
+  // Update bio char count
+  var bioEl = document.getElementById("bio");
+  updateCharCount(bioEl, "bio-count", 500);
+
+  // Reset resume card back to upload state
+  cancelResumePreview();
+
+  showAlert(
+    "profile-alert",
+    "✨ Profile filled from resume! Review the fields and click Save Profile.",
+    "success"
+  );
+
+  // Scroll down to profile form
+  document.querySelector(".profile-card:nth-child(2)")
+    .scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ── Cancel preview, reset upload zone ── */
+function cancelResumePreview() {
+  parsedResumeData = null;
+  document.getElementById("resume-drop-zone").style.display = "";
+  document.getElementById("resume-parsing").style.display  = "none";
+  document.getElementById("resume-preview").style.display  = "none";
+  document.getElementById("resume-file").value             = "";
+}
+
+/* ── escHtml needed here too ── */
+function escHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
     </script>
   </body>
 </html>
