@@ -1,9 +1,7 @@
-// routes/messages.js
 const express = require("express");
 const router  = express.Router();
 const db      = require("../db");
 
-// Middleware - make sure user is logged in
 function requireAuth(req, res, next) {
   if (!req.session?.userId) {
     return res.status(401).json({ error: "Not logged in" });
@@ -11,31 +9,30 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// ── GET /api/messages/conversations
-// Get all conversations for logged in user
-router.get("/conversations", requireAuth, (req, res) => {
+// GET /api/messages/conversations
+router.get("/conversations", requireAuth, async (req, res) => {
   try {
-    const conversations = db.messaging.getConversationsForUser(req.session.userId);
+    const conversations = await db.messaging.getConversationsForUser(
+      req.session.userId
+    );
     res.json({ conversations });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── GET /api/messages/unread
-// Get total unread count (for nav badge)
-router.get("/unread", requireAuth, (req, res) => {
+// GET /api/messages/unread
+router.get("/unread", requireAuth, async (req, res) => {
   try {
-    const count = db.messaging.getTotalUnread(req.session.userId);
+    const count = await db.messaging.getTotalUnread(req.session.userId);
     res.json({ count });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── POST /api/messages/conversations
-// Start or get existing conversation with another user
-router.post("/conversations", requireAuth, (req, res) => {
+// POST /api/messages/conversations
+router.post("/conversations", requireAuth, async (req, res) => {
   try {
     const { target_user_id } = req.body;
 
@@ -43,17 +40,16 @@ router.post("/conversations", requireAuth, (req, res) => {
       return res.status(400).json({ error: "target_user_id is required" });
     }
 
-    if (target_user_id === req.session.userId) {
+    if (String(target_user_id) === String(req.session.userId)) {
       return res.status(400).json({ error: "Cannot message yourself" });
     }
 
-    // Make sure target user exists
-    const targetUser = db.users.findById(target_user_id);
+    const targetUser = await db.users.findById(target_user_id);
     if (!targetUser) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const conversationId = db.messaging.getOrCreateConversation(
+    const conversationId = await db.messaging.getOrCreateConversation(
       req.session.userId,
       target_user_id
     );
@@ -64,23 +60,23 @@ router.post("/conversations", requireAuth, (req, res) => {
   }
 });
 
-// ── GET /api/messages/conversations/:id
-// Get messages in a conversation (paginated)
-router.get("/conversations/:id", requireAuth, (req, res) => {
+// GET /api/messages/conversations/:id
+router.get("/conversations/:id", requireAuth, async (req, res) => {
   try {
-    const convId = parseInt(req.params.id);
+    const convId = req.params.id;
     const limit  = parseInt(req.query.limit)  || 50;
     const offset = parseInt(req.query.offset) || 0;
 
-    // Make sure user is in this conversation
-    if (!db.messaging.isParticipant(req.session.userId, convId)) {
+    const isParticipant = await db.messaging.isParticipant(
+      req.session.userId,
+      convId
+    );
+    if (!isParticipant) {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    const result = db.messaging.getMessages(convId, limit, offset);
-
-    // Mark as read when fetching
-    db.messaging.markAsRead(convId, req.session.userId);
+    const result = await db.messaging.getMessages(convId, limit, offset);
+    await db.messaging.markAsRead(convId, req.session.userId);
 
     res.json(result);
   } catch (err) {
@@ -88,11 +84,10 @@ router.get("/conversations/:id", requireAuth, (req, res) => {
   }
 });
 
-// ── POST /api/messages/conversations/:id
-// Send a message
-router.post("/conversations/:id", requireAuth, (req, res) => {
+// POST /api/messages/conversations/:id
+router.post("/conversations/:id", requireAuth, async (req, res) => {
   try {
-    const convId  = parseInt(req.params.id);
+    const convId      = req.params.id;
     const { content } = req.body;
 
     if (!content?.trim()) {
@@ -103,30 +98,40 @@ router.post("/conversations/:id", requireAuth, (req, res) => {
       return res.status(400).json({ error: "Message too long (max 5000 chars)" });
     }
 
-    // Make sure user is in this conversation
-    if (!db.messaging.isParticipant(req.session.userId, convId)) {
+    const isParticipant = await db.messaging.isParticipant(
+      req.session.userId,
+      convId
+    );
+    if (!isParticipant) {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    const message = db.messaging.sendMessage(convId, req.session.userId, content);
+    const message = await db.messaging.sendMessage(
+      convId,
+      req.session.userId,
+      content
+    );
     res.json({ message });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── PATCH /api/messages/:messageId
-// Edit a message
-router.patch("/:messageId", requireAuth, (req, res) => {
+// PATCH /api/messages/:messageId
+router.patch("/:messageId", requireAuth, async (req, res) => {
   try {
-    const msgId      = parseInt(req.params.messageId);
+    const msgId       = req.params.messageId;
     const { content } = req.body;
 
     if (!content?.trim()) {
       return res.status(400).json({ error: "Content is required" });
     }
 
-    const message = db.messaging.editMessage(msgId, req.session.userId, content);
+    const message = await db.messaging.editMessage(
+      msgId,
+      req.session.userId,
+      content
+    );
     res.json({ message });
   } catch (err) {
     if (err.message.includes("Cannot edit")) {
@@ -136,44 +141,33 @@ router.patch("/:messageId", requireAuth, (req, res) => {
   }
 });
 
-// ── DELETE /api/messages/:messageId
-// Delete a message
-router.delete("/:messageId", requireAuth, (req, res) => {
+// DELETE /api/messages/conversations/:id
+router.delete("/conversations/:id", requireAuth, async (req, res) => {
   try {
-    const msgId = parseInt(req.params.messageId);
-    const result = db.messaging.deleteMessage(msgId, req.session.userId);
-    res.json(result);
-  } catch (err) {
-    if (err.message.includes("Cannot delete")) {
-      return res.status(403).json({ error: err.message });
-    }
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── DELETE /api/messages/conversations/:id
-// Delete entire conversation
-router.delete("/conversations/:id", requireAuth, (req, res) => {
-  try {
-    const convId = parseInt(req.params.id);
-    const result = db.messaging.deleteConversation(convId, req.session.userId);
+    const convId = req.params.id;
+    const result = await db.messaging.deleteConversation(
+      convId,
+      req.session.userId
+    );
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── POST /api/messages/conversations/:id/read
-// Manually mark conversation as read
-router.post("/conversations/:id/read", requireAuth, (req, res) => {
+// POST /api/messages/conversations/:id/read
+router.post("/conversations/:id/read", requireAuth, async (req, res) => {
   try {
-    const convId = parseInt(req.params.id);
-
-    if (!db.messaging.isParticipant(req.session.userId, convId)) {
+    const convId        = req.params.id;
+    const isParticipant = await db.messaging.isParticipant(
+      req.session.userId,
+      convId
+    );
+    if (!isParticipant) {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    const result = db.messaging.markAsRead(convId, req.session.userId);
+    const result = await db.messaging.markAsRead(convId, req.session.userId);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

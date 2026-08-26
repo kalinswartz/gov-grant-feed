@@ -4,47 +4,65 @@ const cors           = require("cors");
 const cron           = require("node-cron");
 const path           = require("path");
 const session        = require("express-session");
-const FileStore      = require("session-file-store")(session);
+const { MongoClient, ServerApiVersion } = require("mongodb");
+const MongoStore     = require("connect-mongo").MongoStore;
+const { connectDB }  = require("./lib/mongoose");
 
 const app            = express();
-const PORT           = process.env.PORT           || 3000;
-const CRON_SCHEDULE  = process.env.CRON_SCHEDULE  || "0 0 * * *";
+const PORT           = process.env.PORT          || 3000;
+const CRON_SCHEDULE  = process.env.CRON_SCHEDULE || "0 0 * * *";
 const SESSION_SECRET = process.env.SESSION_SECRET || "change_me_please";
+
+/* ── Connect to MongoDB ── */
+connectDB();
 
 /* ── Middleware ── */
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 
-/* ── Sessions — stored as JSON files in ./sessions/ folder ── */
+/* ── Sessions stored in MongoDB ── */
 app.use(session({
-  store: new FileStore({
-    path:        "./sessions",
-    ttl:         7 * 24 * 60 * 60, // 7 days in seconds
-    retries:     1,
-    logFn:       function() {},     // silence verbose logs
+  store: MongoStore.create({
+    mongoUrl:   process.env.MONGODB_URI,
+    dbName:     "fundingopportunities",
+    ttl:        7 * 24 * 60 * 60,
+    autoRemove: "native",
+    mongoClientOptions: {
+      serverApi: {
+        version:          ServerApiVersion.v1,
+        strict:           true,
+        deprecationErrors: true,
+      }
+    }
   }),
   secret:            SESSION_SECRET,
   resave:            false,
   saveUninitialized: false,
   cookie: {
-    maxAge:   7 * 24 * 60 * 60 * 1000, // 7 days in ms
+    maxAge:   7 * 24 * 60 * 60 * 1000,
     httpOnly: true,
     sameSite: "lax",
+    secure:   process.env.NODE_ENV === "production",
   },
 }));
 
-/* ── Auth routes (public) ── */
+/* ── Health check ── */
+app.get("/health", (req, res) => res.json({ status: "ok" }));
+
+/* ── Auth routes ── */
 const { router: authRouter, requireAuth } = require("./routes/auth");
 app.use("/auth", authRouter);
 
+/* ── Messages routes ── */
 const messagesRouter = require("./routes/messages");
 app.use("/api/messages", messagesRouter);
 
-/* ── Protected API routes ── */
-app.use("/api", requireAuth, require("./routes/api"));
-
+/* ── Resume routes ── */
 const resumeRouter = require("./routes/resume");
 app.use("/api/resume", requireAuth, resumeRouter);
+
+/* ── Protected API routes ── */
+app.use("/api", requireAuth, require("./routes/api"));
 
 /* ── Static files ── */
 app.use(express.static(path.join(__dirname, "public")));

@@ -3,39 +3,32 @@ const router  = express.Router();
 const db      = require("../db");
 
 // GET /api/opportunities
-router.get("/opportunities", (req, res) => {
+router.get("/opportunities", async (req, res) => {
   try {
     const page   = Math.max(1, parseInt(req.query.page)  || 1);
     const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const offset = (page - 1) * limit;
-    const source = req.query.source || null;
-    const search = req.query.search || null;
-    const sort   = req.query.sort === "close_date" ? "close_date" : "fetched_at";
-    const agency = req.query.agency || null;
 
-    let where  = "WHERE 1=1";
-    const params = [];
+    const { total, rows } = await db.opportunities.find({
+      source: req.query.source || null,
+      search: req.query.search || null,
+      agency: req.query.agency || null,
+      sort:   req.query.sort   || "fetched_at",
+      limit,
+      offset,
+    });
 
-    if (source) { where += " AND source = ?";                                        params.push(source); }
-    if (search) { where += " AND (title LIKE ? OR summary LIKE ? OR agency LIKE ?)"; const t = `%${search}%`; params.push(t, t, t); }
-    if (agency) { where += " AND agency LIKE ?";                                     params.push(`%${agency}%`); }
-
-    const total = db.prepare(`SELECT COUNT(*) as cnt FROM opportunities ${where}`).get(...params).cnt;
-    const rows  = db.prepare(
-      `SELECT * FROM opportunities ${where} ORDER BY ${sort} DESC NULLS LAST LIMIT ? OFFSET ?`
-    ).all(...params, limit, offset);
-
-    // Attach interest counts and current user's interest status
     const userId = req.session.userId;
-    const ids    = rows.map((r) => r.id);
-    const counts = db.interests.getCounts(ids);
-    const myList = userId ? db.interests.getByUser(userId) : [];
+    const ids    = rows.map((r) => r._id || r.id);
+    const counts = await db.interests.getCounts(ids);
+    const myList = userId ? await db.interests.getByUser(userId) : [];
     const mySet  = new Set(myList.map(String));
 
     const results = rows.map((r) => ({
       ...r,
-      interest_count:   counts[String(r.id)] || 0,
-      user_interested:  mySet.has(String(r.id)),
+      id:             String(r._id || r.id),
+      interest_count:  counts[String(r._id || r.id)] || 0,
+      user_interested: mySet.has(String(r._id || r.id)),
     }));
 
     res.json({ total, page, limit, pages: Math.ceil(total / limit), results });
@@ -45,51 +38,39 @@ router.get("/opportunities", (req, res) => {
 });
 
 // GET /api/opportunities/:id
-router.get("/opportunities/:id", (req, res) => {
+router.get("/opportunities/:id", async (req, res) => {
   try {
-    const row = db.prepare("SELECT * FROM opportunities WHERE id = ?").get(req.params.id);
+    const row = await db.opportunities.findById(req.params.id);
     if (!row) return res.status(404).json({ error: "Not found" });
 
-    const userId          = req.session.userId;
-    row.interest_count    = db.interests.getCounts([row.id])[String(row.id)] || 0;
-    row.user_interested   = userId ? db.interests.isInterested(userId, row.id) : false;
-    row.interested_users  = db.interests.getInterestedUsers(row.id);
+    const userId = req.session.userId;
+    const id     = String(row._id || row.id);
 
-    res.json(row);
+    row.interest_count   = (await db.interests.getCounts([id]))[id] || 0;
+    row.user_interested  = userId
+      ? await db.interests.isInterested(userId, id)
+      : false;
+    row.interested_users = await db.interests.getInterestedUsers(id);
+
+    res.json({ ...row, id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // GET /api/agencies
-router.get("/agencies", (req, res) => {
+router.get("/agencies", async (req, res) => {
   try {
-    res.json(db.prepare(
-      `SELECT agency, COUNT(*) as count FROM opportunities
-       WHERE agency IS NOT NULL AND agency != ''
-       GROUP BY agency ORDER BY count DESC`
-    ).all());
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/sources
-router.get("/sources", (req, res) => {
-  try {
-    res.json(db.prepare(
-      `SELECT source, COUNT(*) as count, MAX(fetched_at) as last_fetched
-       FROM opportunities GROUP BY source`
-    ).all());
+    res.json(await db.opportunities.getAgencies());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // GET /api/logs
-router.get("/logs", (req, res) => {
+router.get("/logs", async (req, res) => {
   try {
-    res.json(db.prepare(`SELECT * FROM fetch_log ORDER BY ran_at DESC LIMIT 50`).all());
+    res.json(await db.fetchLog.getAll());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -107,61 +88,52 @@ router.post("/refresh", async (req, res) => {
 });
 
 // GET /api/stats
-router.get("/stats", (req, res) => {
+router.get("/stats", async (req, res) => {
   try {
-    const total    = db.prepare("SELECT COUNT(*) as cnt FROM opportunities").get().cnt;
-    const bySource = db.prepare(`SELECT source, COUNT(*) as count FROM opportunities GROUP BY source`).all();
-    const lastRun  = db.prepare("SELECT ran_at FROM fetch_log ORDER BY ran_at DESC LIMIT 1").get();
-    const newToday = db.prepare(
-      `SELECT COUNT(*) as cnt FROM opportunities WHERE DATE(fetched_at) = DATE('now')`
-    ).get().cnt;
-    res.json({ total, bySource, lastRun: lastRun?.ran_at || null, newToday });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ════════════════════════════
-// Interest endpoints
-// ════════════════════════════
-
-// POST /api/opportunities/:id/interest — toggle interest on/off
-router.post("/opportunities/:id/interest", (req, res) => {
-  try {
-    const oppId  = req.params.id;
-    const userId = req.session.userId;
-
-    // Verify opportunity exists
-    const opp = db.prepare("SELECT * FROM opportunities WHERE id = ?").get(oppId);
-    if (!opp) return res.status(404).json({ error: "Opportunity not found" });
-
-    const result = db.interests.toggle(userId, oppId);
-    const count  = db.interests.getCounts([oppId])[String(oppId)] || 0;
-
+    const { total, newToday, bySource } = await db.opportunities.getStats();
+    const lastRun = await db.fetchLog.getLast();
     res.json({
-      interested: result.interested,
-      count,
+      total,
+      newToday,
+      bySource,
+      lastRun: lastRun?.ran_at || null,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/opportunities/:id/interest — get all interested users for an opportunity
-router.get("/opportunities/:id/interest", (req, res) => {
+// POST /api/opportunities/:id/interest
+router.post("/opportunities/:id/interest", async (req, res) => {
+  try {
+    const oppId  = req.params.id;
+    const userId = req.session.userId;
+
+    const opp = await db.opportunities.findById(oppId);
+    if (!opp) return res.status(404).json({ error: "Opportunity not found" });
+
+    const result = await db.interests.toggle(userId, oppId);
+    const count  = (await db.interests.getCounts([oppId]))[String(oppId)] || 0;
+
+    res.json({ interested: result.interested, count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/opportunities/:id/interest
+router.get("/opportunities/:id/interest", async (req, res) => {
   try {
     const oppId = req.params.id;
 
-    const opp = db.prepare("SELECT * FROM opportunities WHERE id = ?").get(oppId);
+    const opp = await db.opportunities.findById(oppId);
     if (!opp) return res.status(404).json({ error: "Opportunity not found" });
 
-    const users = db.interests.getInterestedUsers(oppId);
-    const count = users.length;
-
+    const users = await db.interests.getInterestedUsers(oppId);
     res.json({
-      opportunity_id:   oppId,
+      opportunity_id:    oppId,
       opportunity_title: opp.title,
-      count,
+      count:             users.length,
       users,
     });
   } catch (err) {
@@ -169,35 +141,36 @@ router.get("/opportunities/:id/interest", (req, res) => {
   }
 });
 
-// GET /api/my-interests — all opportunities the current user is interested in
-router.get("/my-interests", (req, res) => {
+// GET /api/my-interests
+router.get("/my-interests", async (req, res) => {
   try {
-    const userId  = req.session.userId;
-    const oppIds  = db.interests.getByUser(userId);
+    const userId = req.session.userId;
+    const oppIds = await db.interests.getByUser(userId);
 
     if (!oppIds.length) return res.json({ total: 0, results: [] });
 
-    // Fetch full opportunity data for each id
-    let results = oppIds.map((id) => {
-      const opp = db.prepare("SELECT * FROM opportunities WHERE id = ?").get(id);
-      if (!opp) return null;
-      return {
-        ...opp,
-        interest_count:  db.interests.getCounts([opp.id])[String(opp.id)] || 0,
-        user_interested: true,
-      };
-    }).filter(Boolean);
-
-    // remove closed grants from interests too
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    results = results.filter((r) => {
-      if (!r.close_date) return true;
-      const close = new Date(r.close_date);
-      if (isNaN(close)) return true;
-      close.setHours(23, 59, 59, 999);
-      return close >= today;
-    });
+
+    const opps = await Promise.all(
+      oppIds.map((id) => db.opportunities.findById(id))
+    );
+
+    const results = opps
+      .filter(Boolean)
+      .filter((r) => {
+        if (!r.close_date) return true;
+        const close = new Date(r.close_date);
+        if (isNaN(close)) return true;
+        close.setHours(23, 59, 59, 999);
+        return close >= today;
+      })
+      .map((r) => ({
+        ...r,
+        id:             String(r._id || r.id),
+        interest_count:  0,
+        user_interested: true,
+      }));
 
     res.json({ total: results.length, results });
   } catch (err) {
@@ -205,11 +178,10 @@ router.get("/my-interests", (req, res) => {
   }
 });
 
-// GET /api/users — list all users (for new message modal)
-router.get("/users", function (req, res) {
+// GET /api/users
+router.get("/users", async (req, res) => {
   try {
-    var users = db.users.getAll();
-    res.json({ users: users });
+    res.json({ users: await db.users.getAll() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

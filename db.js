@@ -1,202 +1,47 @@
-const fs   = require("fs");
-const path = require("path");
-
-const DB_PATH       = path.join(__dirname, "grants.json");
-const USERS_PATH    = path.join(__dirname, "users.json");
-const INTEREST_PATH = path.join(__dirname, "interests.json");
-const MESSAGES_PATH = path.join(__dirname, "messages.json");  // ← ADD THIS
-
-/* ── Grants DB ── */
-function loadDB() {
-  if (!fs.existsSync(DB_PATH)) {
-    const empty = { opportunities: [], fetch_log: [], next_id: 1 };
-    fs.writeFileSync(DB_PATH, JSON.stringify(empty, null, 2));
-    return empty;
-  }
-  try {
-    return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-  } catch {
-    const empty = { opportunities: [], fetch_log: [], next_id: 1 };
-    fs.writeFileSync(DB_PATH, JSON.stringify(empty, null, 2));
-    return empty;
-  }
-}
-
-function saveDB(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
-
-/* ── Users DB ── */
-function loadUsers() {
-  if (!fs.existsSync(USERS_PATH)) {
-    const empty = { users: [], next_user_id: 1 };
-    fs.writeFileSync(USERS_PATH, JSON.stringify(empty, null, 2));
-    return empty;
-  }
-  try {
-    return JSON.parse(fs.readFileSync(USERS_PATH, "utf8"));
-  } catch {
-    const empty = { users: [], next_user_id: 1 };
-    fs.writeFileSync(USERS_PATH, JSON.stringify(empty, null, 2));
-    return empty;
-  }
-}
-
-function saveUsers(data) {
-  fs.writeFileSync(USERS_PATH, JSON.stringify(data, null, 2));
-}
-
-/* ── Interests DB ── */
-function loadInterests() {
-  if (!fs.existsSync(INTEREST_PATH)) {
-    const empty = { interests: [], next_id: 1 };
-    fs.writeFileSync(INTEREST_PATH, JSON.stringify(empty, null, 2));
-    return empty;
-  }
-  try {
-    return JSON.parse(fs.readFileSync(INTEREST_PATH, "utf8"));
-  } catch {
-    const empty = { interests: [], next_id: 1 };
-    fs.writeFileSync(INTEREST_PATH, JSON.stringify(empty, null, 2));
-    return empty;
-  }
-}
-
-function saveInterests(data) {
-  fs.writeFileSync(INTEREST_PATH, JSON.stringify(data, null, 2));
-}
-
-/* ── Messages DB ── NEW */
-function loadMessages() {
-  if (!fs.existsSync(MESSAGES_PATH)) {
-    const empty = {
-      conversations: [],
-      participants:  [],
-      messages:      [],
-      next_convo_id: 1,
-      next_msg_id:   1,
-    };
-    fs.writeFileSync(MESSAGES_PATH, JSON.stringify(empty, null, 2));
-    return empty;
-  }
-  try {
-    return JSON.parse(fs.readFileSync(MESSAGES_PATH, "utf8"));
-  } catch {
-    const empty = {
-      conversations: [],
-      participants:  [],
-      messages:      [],
-      next_convo_id: 1,
-      next_msg_id:   1,
-    };
-    fs.writeFileSync(MESSAGES_PATH, JSON.stringify(empty, null, 2));
-    return empty;
-  }
-}
-
-function saveMessages(data) {
-  fs.writeFileSync(MESSAGES_PATH, JSON.stringify(data, null, 2));
-}
-
-/* ── WHERE clause helper ── */
-function applyFilters(rows, sql, args) {
-  let filtered = [...rows];
-  let i = 0;
-
-  if (sql.includes("AND source = ?")) {
-    const val = args[i++];
-    filtered = filtered.filter((r) => r.source === val);
-  }
-
-  if (sql.includes("AND (title LIKE ?")) {
-    const term = (args[i++] || "").replace(/%/g, "").toLowerCase();
-    i += 2;
-    filtered = filtered.filter(
-      (r) =>
-        (r.title   || "").toLowerCase().includes(term) ||
-        (r.summary || "").toLowerCase().includes(term) ||
-        (r.agency  || "").toLowerCase().includes(term)
-    );
-  }
-
-  if (sql.includes("AND agency LIKE ?")) {
-    const term = (args[i++] || "").replace(/%/g, "").toLowerCase();
-    filtered = filtered.filter(
-      (r) => (r.agency || "").toLowerCase().includes(term)
-    );
-  }
-
-  if (sql.includes("DATE(fetched_at) = DATE('now')")) {
-    const today = new Date().toISOString().split("T")[0];
-    filtered = filtered.filter(
-      (r) => r.fetched_at && r.fetched_at.startsWith(today)
-    );
-  }
-
-  // 
-const now = new Date();
-now.setHours(0, 0, 0, 0);
-filtered = filtered.filter((r) => {
-  if (!r.close_date) return true;
-  const close = new Date(r.close_date);
-  if (isNaN(close)) return true;
-  close.setHours(23, 59, 59, 999);
-  return close >= now;
-});
-
-  return filtered;
-}
+const {
+  User,
+  Opportunity,
+  FetchLog,
+  Interest,
+  Conversation,
+  Participant,
+  Message,
+} = require("./lib/models");
 
 const db = {
 
   /* ════════════════════════════
-     User methods
+     Users
   ════════════════════════════ */
   users: {
-    findByUsername(username) {
-      const data = loadUsers();
-      return data.users.find(
-        (u) => u.username.toLowerCase() === username.toLowerCase()
-      ) || null;
+    async findByUsername(username) {
+      return User.findOne({
+        username: new RegExp(`^${username}$`, "i"),
+      }).lean();
     },
 
-    findById(id) {
-      const data = loadUsers();
-      return data.users.find((u) => u.id === id) || null;
+    async findById(id) {
+      try {
+        return await User.findById(id).lean();
+      } catch {
+        return null;
+      }
     },
 
-    create(username, hashedPassword) {
-      const data   = loadUsers();
-      const exists = data.users.find(
-        (u) => u.username.toLowerCase() === username.toLowerCase()
-      );
+    async create(username, hashedPassword) {
+      const exists = await User.findOne({
+        username: new RegExp(`^${username}$`, "i"),
+      });
       if (exists) throw new Error("Username already taken");
 
-      const user = {
-        id:           data.next_user_id++,
-        username,
-        password:     hashedPassword,
-        role:         "user",
-        created_at:   new Date().toISOString(),
-        display_name: "",
-        company:      "",
-        job_title:    "",
-        department:   "",
-        email:        "",
-        phone:        "",
-        location:     "",
-        bio:          "",
-      };
-
-      data.users.push(user);
-      saveUsers(data);
-      return user;
+      const user = await User.create({ username, password: hashedPassword });
+      return user.toObject();
     },
 
-    getAll() {
-      const data = loadUsers();
-      return data.users.map((u) => ({
-        id:           u.id,
+    async getAll() {
+      const users = await User.find({}, { password: 0 }).lean();
+      return users.map((u) => ({
+        id:           u._id,
         username:     u.username,
         role:         u.role,
         created_at:   u.created_at,
@@ -209,585 +54,521 @@ const db = {
       }));
     },
 
-    getProfile(id) {
-      const data = loadUsers();
-      const user = data.users.find((u) => u.id === id);
-      if (!user) return null;
-      const { password, ...profile } = user;
-      return profile;
+    async getProfile(id) {
+      try {
+        const user = await User.findById(id, { password: 0 }).lean();
+        if (!user) return null;
+        return { ...user, id: user._id };
+      } catch {
+        return null;
+      }
     },
 
-    getPublicProfile(id) {
-      const data = loadUsers();
-      const user = data.users.find((u) => u.id === id);
-      if (!user) return null;
-      return {
-        id:           user.id,
-        username:     user.username,
-        display_name: user.display_name || "",
-        company:      user.company      || "",
-        job_title:    user.job_title    || "",
-        department:   user.department   || "",
-        email:        user.email        || "",
-        location:     user.location     || "",
-        bio:          user.bio          || "",
-        role:         user.role,
-        created_at:   user.created_at,
-      };
+    async getPublicProfile(id) {
+      try {
+        const user = await User.findById(id, { password: 0 }).lean();
+        if (!user) return null;
+        return {
+          id:           user._id,
+          username:     user.username,
+          display_name: user.display_name || "",
+          company:      user.company      || "",
+          job_title:    user.job_title    || "",
+          department:   user.department   || "",
+          email:        user.email        || "",
+          location:     user.location     || "",
+          bio:          user.bio          || "",
+          role:         user.role,
+          created_at:   user.created_at,
+        };
+      } catch {
+        return null;
+      }
     },
 
-    updateProfile(id, fields) {
-      const data = loadUsers();
-      const user = data.users.find((u) => u.id === id);
-      if (!user) throw new Error("User not found");
-
+    async updateProfile(id, fields) {
       const allowed = [
         "display_name", "company", "job_title",
         "department", "email", "phone", "location", "bio",
       ];
-
-      allowed.forEach((field) => {
-        if (fields[field] !== undefined) {
-          user[field] = String(fields[field]).trim().slice(0, 200);
+      const update = { updated_at: new Date() };
+      allowed.forEach((f) => {
+        if (fields[f] !== undefined) {
+          update[f] = String(fields[f]).trim().slice(0, 200);
         }
       });
 
-      user.updated_at = new Date().toISOString();
-      saveUsers(data);
-      return user;
+      const user = await User.findByIdAndUpdate(id, update, { new: true }).lean();
+      if (!user) throw new Error("User not found");
+      return { ...user, id: user._id };
     },
 
-    updatePassword(id, hashedPassword) {
-      const data = loadUsers();
-      const user = data.users.find((u) => u.id === id);
+    async updatePassword(id, hashedPassword) {
+      const user = await User.findByIdAndUpdate(id, {
+        password:   hashedPassword,
+        updated_at: new Date(),
+      });
       if (!user) throw new Error("User not found");
-      user.password   = hashedPassword;
-      user.updated_at = new Date().toISOString();
-      saveUsers(data);
       return true;
     },
 
-    delete(id) {
-      const data   = loadUsers();
-      const before = data.users.length;
-      data.users   = data.users.filter((u) => u.id !== id);
-      saveUsers(data);
-      return data.users.length < before;
+    async delete(id) {
+      try {
+        const result = await User.deleteOne({ _id: id });
+        return result.deletedCount > 0;
+      } catch {
+        return false;
+      }
     },
 
-    updateRole(id, role) {
-      const data = loadUsers();
-      const user = data.users.find((u) => u.id === id);
+    async updateRole(id, role) {
+      const user = await User.findByIdAndUpdate(
+        id, { role }, { new: true }
+      ).lean();
       if (!user) throw new Error("User not found");
-      user.role = role;
-      saveUsers(data);
-      return user;
+      return { ...user, id: user._id };
     },
   },
 
   /* ════════════════════════════
-     Interest methods
+     Interests
   ════════════════════════════ */
   interests: {
+    async toggle(userId, opportunityId) {
+      const existing = await Interest.findOne({
+        user_id:        userId,
+        opportunity_id: opportunityId,
+      });
 
-    toggle(userId, opportunityId) {
-      const data     = loadInterests();
-      const oppIdStr = String(opportunityId);
-      const existing = data.interests.findIndex(
-        (i) => i.user_id === userId && i.opportunity_id === oppIdStr
-      );
-
-      if (existing >= 0) {
-        data.interests.splice(existing, 1);
-        saveInterests(data);
+      if (existing) {
+        await Interest.deleteOne({ _id: existing._id });
         return { interested: false };
       } else {
-        data.interests.push({
-          id:             data.next_id++,
+        await Interest.create({
           user_id:        userId,
-          opportunity_id: oppIdStr,
-          created_at:     new Date().toISOString(),
+          opportunity_id: opportunityId,
         });
-        saveInterests(data);
         return { interested: true };
       }
     },
 
-    isInterested(userId, opportunityId) {
-      const data = loadInterests();
-      return data.interests.some(
-        (i) => i.user_id === userId && i.opportunity_id === String(opportunityId)
-      );
-    },
-
-    getInterestedUsers(opportunityId) {
-      const data    = loadInterests();
-      const oppIdStr = String(opportunityId);
-      const entries = data.interests.filter(
-        (i) => i.opportunity_id === oppIdStr
-      );
-
-      return entries.map((entry) => {
-        const profile = db.users.getPublicProfile(entry.user_id);
-        return {
-          ...profile,
-          interested_at: entry.created_at,
-        };
-      }).filter(Boolean);
-    },
-
-    getByUser(userId) {
-      const data = loadInterests();
-      return data.interests
-        .filter((i) => i.user_id === userId)
-        .map((i) => i.opportunity_id);
-    },
-
-    getCounts(opportunityIds) {
-      const data   = loadInterests();
-      const counts = {};
-      opportunityIds.forEach((id) => {
-        const idStr  = String(id);
-        counts[idStr] = data.interests.filter(
-          (i) => i.opportunity_id === idStr
-        ).length;
+    async isInterested(userId, opportunityId) {
+      const exists = await Interest.findOne({
+        user_id:        userId,
+        opportunity_id: opportunityId,
       });
+      return !!exists;
+    },
+
+    async getInterestedUsers(opportunityId) {
+      const interests = await Interest.find({
+        opportunity_id: opportunityId,
+      }).lean();
+
+      const profiles = await Promise.all(
+        interests.map((i) => db.users.getPublicProfile(i.user_id))
+      );
+
+      return profiles
+        .filter(Boolean)
+        .map((p, idx) => ({
+          ...p,
+          interested_at: interests[idx].created_at,
+        }));
+    },
+
+    async getByUser(userId) {
+      const interests = await Interest.find({ user_id: userId }).lean();
+      return interests.map((i) => String(i.opportunity_id));
+    },
+
+    async getCounts(opportunityIds) {
+      const counts = {};
+      await Promise.all(
+        opportunityIds.map(async (id) => {
+          counts[String(id)] = await Interest.countDocuments({
+            opportunity_id: id,
+          });
+        })
+      );
       return counts;
     },
   },
 
   /* ════════════════════════════
-     Messaging methods  ← NEW
+     Messaging
   ════════════════════════════ */
   messaging: {
+    async findDirectConversation(userIdA, userIdB) {
+      const userAConvos = await Participant.find({
+        user_id: userIdA,
+      }).distinct("conversation_id");
 
-    // ── Conversations ──────────────────────────
-
-    findDirectConversation(userIdA, userIdB) {
-  const data = loadMessages();
-
-  const userAConvos = data.participants
-    .filter((p) => p.user_id === userIdA)  // ← no deleted_at filter
-    .map((p) => p.conversation_id);
-
-  const match = userAConvos.find((convId) => {
-    const members   = data.participants.filter((p) => p.conversation_id === convId);
-    const memberIds = members.map((m) => m.user_id);
-    return (
-      memberIds.length === 2 &&
-      memberIds.includes(userIdA) &&
-      memberIds.includes(userIdB)
-    );
-  });
-
-  return match || null;
-},
-
-    getOrCreateConversation(userIdA, userIdB) {
-  const data = loadMessages();
-
-  // Check if conversation already exists (including soft deleted ones)
-  const userAConvos = data.participants
-    .filter((p) => p.user_id === userIdA)  // ← no deleted_at filter here
-    .map((p) => p.conversation_id);
-
-  const match = userAConvos.find((convId) => {
-    const members    = data.participants.filter((p) => p.conversation_id === convId);
-    const memberIds  = members.map((m) => m.user_id);
-    return (
-      memberIds.length === 2 &&
-      memberIds.includes(userIdA) &&
-      memberIds.includes(userIdB)
-    );
-  });
-
-  if (match) {
-  let restored = false;
-  data.participants.forEach((p) => {
-    // use == instead of === to handle string/number mismatch
-    if (p.conversation_id == match && p.deleted_at) {
-      delete p.deleted_at;
-      restored = true;
-    }
-  });
-  if (restored) saveMessages(data);
-  return match;
-}
-
-  // Create new conversation
-  const convId = data.next_convo_id++;
-  data.conversations.push({
-    id:         convId,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  });
-
-  data.participants.push(
-    {
-      conversation_id: convId,
-      user_id:         userIdA,
-      joined_at:       new Date().toISOString(),
-      last_read_at:    new Date().toISOString(),
+      for (const convId of userAConvos) {
+        const members   = await Participant.find({ conversation_id: convId }).lean();
+        const memberIds = members.map((m) => String(m.user_id));
+        if (
+          memberIds.length === 2 &&
+          memberIds.includes(String(userIdA)) &&
+          memberIds.includes(String(userIdB))
+        ) {
+          return convId;
+        }
+      }
+      return null;
     },
-    {
-      conversation_id: convId,
-      user_id:         userIdB,
-      joined_at:       new Date().toISOString(),
-      last_read_at:    new Date().toISOString(),
-    }
-  );
 
-  saveMessages(data);
-  return convId;
-},
+    async getOrCreateConversation(userIdA, userIdB) {
+      const existing = await db.messaging.findDirectConversation(
+        userIdA,
+        userIdB
+      );
 
-    // Get all conversations for a user with last message + unread count
-    getConversationsForUser(userId) {
-      const data = loadMessages();
+      if (existing) {
+        // Restore for either user that had soft deleted
+        await Participant.updateMany(
+          {
+            conversation_id: existing,
+            deleted_at:      { $ne: null },
+          },
+          { deleted_at: null }
+        );
+        return existing;
+      }
 
-      // Find all conversation IDs this user is in
-      const myParticipations = data.participants.filter(
-    (p) => p.user_id === userId && !p.deleted_at  // ← ADD !p.deleted_at
-    );
+      const conv = await Conversation.create({});
+      await Participant.insertMany([
+        { conversation_id: conv._id, user_id: userIdA },
+        { conversation_id: conv._id, user_id: userIdB },
+      ]);
+      return conv._id;
+    },
 
-      return myParticipations
-        .map((myPart) => {
+    async getConversationsForUser(userId) {
+      const myParts = await Participant.find({
+        user_id:    userId,
+        deleted_at: null,
+      }).lean();
+
+      const convos = await Promise.all(
+        myParts.map(async (myPart) => {
           const convId = myPart.conversation_id;
-          const conv   = data.conversations.find((c) => c.id === convId);
+          const conv   = await Conversation.findById(convId).lean();
           if (!conv) return null;
 
-          // Get other participants with their profiles
-          const otherParticipants = data.participants
-            .filter((p) => p.conversation_id === convId && p.user_id !== userId)
-            .map((p) => db.users.getPublicProfile(p.user_id))
-            .filter(Boolean);
+          const otherParts = await Participant.find({
+            conversation_id: convId,
+            user_id:         { $ne: userId },
+          }).lean();
 
-          // Get last message
-          const convMessages = data.messages
-            .filter((m) => m.conversation_id === convId && !m.is_deleted)
-            .sort((a, b) => b.created_at.localeCompare(a.created_at));
+          const otherUsers = await Promise.all(
+            otherParts.map((p) => db.users.getPublicProfile(p.user_id))
+          );
 
-          const lastMessage = convMessages[0] || null;
+          const lastMessage = await Message.findOne({
+            conversation_id: convId,
+            is_deleted:      false,
+          })
+            .sort({ created_at: -1 })
+            .lean();
 
-          // Count unread messages
-          const lastRead  = new Date(myPart.last_read_at || 0);
-          const unread    = convMessages.filter(
-            (m) =>
-              m.sender_id !== userId &&
-              new Date(m.created_at) > lastRead
-          ).length;
+          const lastRead = new Date(myPart.last_read_at || 0);
+          const unread   = await Message.countDocuments({
+            conversation_id: convId,
+            sender_id:       { $ne: userId },
+            is_deleted:      false,
+            created_at:      { $gt: lastRead },
+          });
 
           return {
-            id:               convId,
-            created_at:       conv.created_at,
-            updated_at:       conv.updated_at,
-            other_users:      otherParticipants,
-            last_message:     lastMessage,
-            unread_count:     unread,
+            id:           convId,
+            created_at:   conv.created_at,
+            updated_at:   conv.updated_at,
+            other_users:  otherUsers.filter(Boolean),
+            last_message: lastMessage,
+            unread_count: unread,
           };
         })
+      );
+
+      return convos
         .filter(Boolean)
-        // Sort by most recent activity
         .sort((a, b) => {
           const aTime = a.last_message?.created_at || a.updated_at;
           const bTime = b.last_message?.created_at || b.updated_at;
-          return bTime.localeCompare(aTime);
+          return new Date(bTime) - new Date(aTime);
         });
     },
 
-    // Check if a user is part of a conversation
-    isParticipant(userId, conversationId) {
-      const data = loadMessages();
-      return data.participants.some(
-        (p) => p.user_id === userId && p.conversation_id === conversationId
-      );
+    async isParticipant(userId, conversationId) {
+      try {
+        const p = await Participant.findOne({
+          user_id:         userId,
+          conversation_id: conversationId,
+        });
+        return !!p;
+      } catch {
+        return false;
+      }
     },
 
-    // ── Messages ───────────────────────────────
-
-    // Send a message
-    sendMessage(conversationId, senderId, content) {
-      const data = loadMessages();
-
-      // Make sure sender is a participant
-      const isParticipant = data.participants.some(
-        (p) => p.conversation_id === conversationId && p.user_id === senderId
+    async sendMessage(conversationId, senderId, content) {
+      const isParticipant = await db.messaging.isParticipant(
+        senderId,
+        conversationId
       );
-      if (!isParticipant) throw new Error("Not a participant in this conversation");
+      if (!isParticipant) {
+        throw new Error("Not a participant in this conversation");
+      }
 
-      const msg = {
-        id:              data.next_msg_id++,
+      const msg = await Message.create({
         conversation_id: conversationId,
         sender_id:       senderId,
         content:         String(content).trim().slice(0, 5000),
-        created_at:      new Date().toISOString(),
-        edited_at:       null,
-        is_deleted:      false,
-      };
+      });
 
-      data.messages.push(msg);
+      await Conversation.findByIdAndUpdate(conversationId, {
+        updated_at: new Date(),
+      });
 
-      // Update conversation updated_at
-      const conv = data.conversations.find((c) => c.id === conversationId);
-      if (conv) conv.updated_at = new Date().toISOString();
-
-      saveMessages(data);
-
-      // Return message with sender profile attached
-      return {
-        ...msg,
-        sender: db.users.getPublicProfile(senderId),
-      };
+      const sender = await db.users.getPublicProfile(senderId);
+      return { ...msg.toObject(), sender };
     },
 
-    // Get messages for a conversation (paginated)
-    getMessages(conversationId, limit = 50, offset = 0) {
-      const data = loadMessages();
+    async getMessages(conversationId, limit = 50, offset = 0) {
+      const total = await Message.countDocuments({
+        conversation_id: conversationId,
+        is_deleted:      false,
+      });
 
-      const msgs = data.messages
-        .filter((m) => m.conversation_id === conversationId && !m.is_deleted)
-        .sort((a, b) => a.created_at.localeCompare(b.created_at));
+      const msgs = await Message.find({
+        conversation_id: conversationId,
+        is_deleted:      false,
+      })
+        .sort({ created_at: 1 })
+        .skip(offset)
+        .limit(limit)
+        .lean();
 
-      const total  = msgs.length;
-      const paged  = msgs.slice(offset, offset + limit);
-
-      // Attach sender profiles
-      const withSenders = paged.map((m) => ({
-        ...m,
-        sender: db.users.getPublicProfile(m.sender_id),
-      }));
+      const withSenders = await Promise.all(
+        msgs.map(async (m) => {
+          const sender = await db.users.getPublicProfile(m.sender_id);
+          return { ...m, id: m._id, sender };
+        })
+      );
 
       return { messages: withSenders, total };
     },
 
-    // Edit a message (only sender can edit)
-    editMessage(messageId, userId, newContent) {
-      const data = loadMessages();
-      const msg  = data.messages.find((m) => m.id === messageId);
-
-      if (!msg)                    throw new Error("Message not found");
-      if (msg.sender_id !== userId) throw new Error("Cannot edit someone else's message");
-      if (msg.is_deleted)           throw new Error("Cannot edit a deleted message");
+    async editMessage(messageId, userId, newContent) {
+      const msg = await Message.findById(messageId);
+      if (!msg) throw new Error("Message not found");
+      if (String(msg.sender_id) !== String(userId)) {
+        throw new Error("Cannot edit someone else's message");
+      }
+      if (msg.is_deleted) throw new Error("Cannot edit a deleted message");
 
       msg.content   = String(newContent).trim().slice(0, 5000);
-      msg.edited_at = new Date().toISOString();
+      msg.edited_at = new Date();
+      await msg.save();
 
-      saveMessages(data);
-      return { ...msg, sender: db.users.getPublicProfile(msg.sender_id) };
+      const sender = await db.users.getPublicProfile(userId);
+      return { ...msg.toObject(), id: msg._id, sender };
     },
 
-    // Soft delete a message (only sender can delete)
-    deleteMessage(messageId, userId) {
-      const data = loadMessages();
-      const msg  = data.messages.find((m) => m.id === messageId);
-
-      if (!msg)                    throw new Error("Message not found");
-      if (msg.sender_id !== userId) throw new Error("Cannot delete someone else's message");
+    async deleteMessage(messageId, userId) {
+      const msg = await Message.findById(messageId);
+      if (!msg) throw new Error("Message not found");
+      if (String(msg.sender_id) !== String(userId)) {
+        throw new Error("Cannot delete someone else's message");
+      }
 
       msg.is_deleted = true;
-            msg.deleted_at = new Date().toISOString();
-
-      saveMessages(data);
+      msg.deleted_at = new Date();
+      await msg.save();
       return { success: true };
     },
 
-    // Mark all messages in a conversation as read for a user
-    markAsRead(conversationId, userId) {
-      const data        = loadMessages();
-      const participant = data.participants.find(
-        (p) => p.conversation_id === conversationId && p.user_id === userId
+    async markAsRead(conversationId, userId) {
+      await Participant.findOneAndUpdate(
+        { conversation_id: conversationId, user_id: userId },
+        { last_read_at: new Date() }
       );
-
-      if (!participant) throw new Error("Not a participant in this conversation");
-
-      participant.last_read_at = new Date().toISOString();
-      saveMessages(data);
       return { success: true };
     },
 
-    // Get total unread count across ALL conversations for a user
-    getTotalUnread(userId) {
-      const data           = loadMessages();
-      const myParticipations = data.participants.filter(
-        (p) => p.user_id === userId
-      );
+    async getTotalUnread(userId) {
+      const myParts = await Participant.find({
+        user_id:    userId,
+        deleted_at: null,
+      }).lean();
 
       let total = 0;
-      myParticipations.forEach((myPart) => {
-        const lastRead = new Date(myPart.last_read_at || 0);
-        const unread   = data.messages.filter(
-          (m) =>
-            m.conversation_id === myPart.conversation_id &&
-            m.sender_id       !== userId &&
-            !m.is_deleted &&
-            new Date(m.created_at) > lastRead
-        ).length;
-        total += unread;
-      });
-
+      await Promise.all(
+        myParts.map(async (p) => {
+          const count = await Message.countDocuments({
+            conversation_id: p.conversation_id,
+            sender_id:       { $ne: userId },
+            is_deleted:      false,
+            created_at:      { $gt: new Date(p.last_read_at || 0) },
+          });
+          total += count;
+        })
+      );
       return total;
     },
 
-    // Soft delete — only hides conversation for the requesting user
-    deleteConversation(conversationId, userId) {
-      const data = loadMessages();
+    async deleteConversation(conversationId, userId) {
+      const participant = await Participant.findOne({
+        conversation_id: conversationId,
+        user_id:         userId,
+      });
+      if (!participant) {
+        throw new Error("Not a participant in this conversation");
+      }
 
-      const participant = data.participants.find(
-        (p) => p.conversation_id === conversationId && p.user_id === userId
-      );
-      if (!participant) throw new Error("Not a participant in this conversation");
-
-      // Just mark this participant as deleted — don't touch other participant
-      participant.deleted_at = new Date().toISOString();
-
-      saveMessages(data);
+      participant.deleted_at = new Date();
+      await participant.save();
       return { success: true };
     },
   },
 
   /* ════════════════════════════
-     Grants / feed methods
+     Opportunities / Feed
   ════════════════════════════ */
-  prepare(sql) {
-    return {
-      run(...args) {
-        const data = loadDB();
+  opportunities: {
+    async upsert(obj) {
+      const filter = {
+        source:      obj.source,
+        external_id: obj.external_id,
+      };
 
-        if (sql.includes("INSERT INTO opportunities")) {
-          const obj = args[0];
-          const idx = data.opportunities.findIndex(
-            (o) => o.source === obj.source && o.external_id === obj.external_id
-          );
-          if (idx >= 0) {
-            const existingKeywords = new Set(
-              (data.opportunities[idx].matched_keywords || "").split(", ").filter(Boolean)
-            );
-            const newKeywords = (obj.matched_keywords || "").split(", ").filter(Boolean);
-            newKeywords.forEach((k) => existingKeywords.add(k));
-            data.opportunities[idx] = {
-              ...data.opportunities[idx],
-              ...obj,
-              id:               data.opportunities[idx].id,
-              matched_keywords: [...existingKeywords].join(", "),
-            };
-          } else {
-            data.opportunities.push({ id: data.next_id++, ...obj });
-          }
-          saveDB(data);
-          return { changes: 1 };
-        }
+      const existing = await Opportunity.findOne(filter).lean();
 
-        if (sql.includes("INSERT INTO fetch_log")) {
-          const isErrorInsert = sql.includes("error");
-          if (isErrorInsert) {
-            const [ran_at, source, status, error] = args;
-            data.fetch_log.push({
-              id: data.next_id++, ran_at, source, status, count: 0, error,
-            });
-          } else {
-            const [ran_at, source, status, count] = args;
-            data.fetch_log.push({
-              id: data.next_id++, ran_at, source, status, count, error: null,
-            });
-          }
-          saveDB(data);
-          return { changes: 1 };
-        }
+      if (existing) {
+        const existingKw = new Set(
+          (existing.matched_keywords || "").split(", ").filter(Boolean)
+        );
+        const newKw = (obj.matched_keywords || "").split(", ").filter(Boolean);
+        newKw.forEach((k) => existingKw.add(k));
 
-        return { changes: 0 };
-      },
+        await Opportunity.findOneAndUpdate(filter, {
+          ...obj,
+          matched_keywords: [...existingKw].join(", "),
+        });
+              } else {
+        await Opportunity.create({
+          ...obj,
+          fetched_at: new Date().toISOString(),
+        });
+      }
+    },
 
-      get(...args) {
-        const data = loadDB();
+    async find(filters = {}) {
+      const query = {};
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-        if (sql.includes("COUNT(*) as cnt")) {
-          let rows = sql.includes("fetch_log")
-            ? data.fetch_log
-            : data.opportunities;
-          rows = applyFilters(rows, sql, args);
-          return { cnt: rows.length };
-        }
+      if (filters.source) query.source = filters.source;
 
-        if (sql.includes("WHERE id = ?")) {
-          return data.opportunities.find((o) => o.id === parseInt(args[0])) || null;
-        }
+      if (filters.search) {
+        query.$or = [
+          { title:   new RegExp(filters.search, "i") },
+          { summary: new RegExp(filters.search, "i") },
+          { agency:  new RegExp(filters.search, "i") },
+        ];
+      }
 
-        if (sql.includes("fetch_log ORDER BY ran_at DESC LIMIT 1")) {
-          const sorted = [...data.fetch_log].sort((a, b) =>
-            b.ran_at.localeCompare(a.ran_at)
-          );
-          return sorted[0] || null;
-        }
+      if (filters.agency) {
+        query.agency = new RegExp(filters.agency, "i");
+      }
 
+      // Filter out expired grants
+      query.$or = query.$or || [];
+      const dateFilter = {
+        $or: [
+          { close_date: null },
+          { close_date: "" },
+          { close_date: { $gte: today.toISOString().split("T")[0] } },
+        ],
+      };
+
+      let sort = { fetched_at: -1 };
+      if (filters.sort === "close_date") {
+        sort = { close_date: 1 };
+      }
+
+      const total = await Opportunity.countDocuments({ ...query, ...dateFilter });
+      const rows  = await Opportunity.find({ ...query, ...dateFilter })
+        .sort(sort)
+        .skip(filters.offset || 0)
+        .limit(filters.limit || 20)
+        .lean();
+
+      return {
+        total,
+        rows: rows.map((r) => ({ ...r, id: r._id })),
+      };
+    },
+
+    async findById(id) {
+      try {
+        const opp = await Opportunity.findById(id).lean();
+        if (!opp) return null;
+        return { ...opp, id: opp._id };
+      } catch {
         return null;
-      },
+      }
+    },
 
-      all(...args) {
-        const data = loadDB();
+    async getAgencies() {
+      const aggs = await Opportunity.aggregate([
+        { $match: { agency: { $nin: [null, ""] } } },
+        { $group: { _id: "$agency", count: { $sum: 1 } } },
+        { $sort:  { count: -1 } },
+        { $project: { agency: "$_id", count: 1, _id: 0 } },
+      ]);
+      return aggs;
+    },
 
-        if (sql.includes("GROUP BY agency")) {
-          const groups = {};
-          data.opportunities.forEach((o) => {
-            if (!o.agency) return;
-            if (!groups[o.agency]) groups[o.agency] = { agency: o.agency, count: 0 };
-            groups[o.agency].count++;
-          });
-          return Object.values(groups).sort((a, b) => b.count - a.count);
-        }
+    async getStats() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString();
 
-        if (sql.includes("FROM opportunities") && !sql.includes("GROUP BY")) {
-          let rows = applyFilters([...data.opportunities], sql, args);
+      const total    = await Opportunity.countDocuments();
+      const newToday = await Opportunity.countDocuments({
+        fetched_at: { $gte: todayStr },
+      });
+      const bySource = await Opportunity.aggregate([
+        { $group: { _id: "$source", count: { $sum: 1 } } },
+        { $project: { source: "$_id", count: 1, _id: 0 } },
+      ]);
 
-       
-        if (sql.includes("close_date")) {
-          // closing soon = ascending (earliest date first)
-          // put grants with no close_date at the end
-          rows.sort((a, b) => {
-            if (!a.close_date && !b.close_date) return 0;
-            if (!a.close_date) return 1;   // no date → push to end
-            if (!b.close_date) return -1;  // no date → push to end
-            return a.close_date.localeCompare(b.close_date);
-          });
-        } else {
-          rows.sort((a, b) =>
-            (b.fetched_at || "").localeCompare(a.fetched_at || "")
-          );
-        }
-
-          const limit  = parseInt(args[args.length - 2]) || 20;
-          const offset = parseInt(args[args.length - 1]) || 0;
-          return rows.slice(offset, offset + limit);
-        }
-
-        if (sql.includes("GROUP BY source")) {
-          const groups = {};
-          data.opportunities.forEach((o) => {
-            if (!groups[o.source]) {
-              groups[o.source] = {
-                source: o.source, count: 0, last_fetched: o.fetched_at || "",
-              };
-            }
-            groups[o.source].count++;
-            if ((o.fetched_at || "") > groups[o.source].last_fetched) {
-              groups[o.source].last_fetched = o.fetched_at;
-            }
-          });
-          return Object.values(groups);
-        }
-
-        if (sql.includes("FROM fetch_log")) {
-          return [...data.fetch_log]
-            .sort((a, b) => b.ran_at.localeCompare(a.ran_at))
-            .slice(0, 50);
-        }
-
-        return [];
-      },
-    };
+      return { total, newToday, bySource };
+    },
   },
 
-  transaction(fn) { return (rows) => fn(rows); },
-  exec() {},
+  /* ════════════════════════════
+     Fetch Log
+  ════════════════════════════ */
+  fetchLog: {
+    async insert(ran_at, source, status, countOrError) {
+      if (status === "error") {
+        await FetchLog.create({ ran_at, source, status, error: countOrError });
+      } else {
+        await FetchLog.create({ ran_at, source, status, count: countOrError });
+      }
+    },
+
+    async getLast() {
+      return FetchLog.findOne().sort({ ran_at: -1 }).lean();
+    },
+
+    async getAll() {
+      return FetchLog.find().sort({ ran_at: -1 }).limit(50).lean();
+    },
+  },
 };
 
 module.exports = db;

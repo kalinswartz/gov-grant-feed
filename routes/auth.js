@@ -1,7 +1,7 @@
-const express  = require("express");
-const bcrypt   = require("bcryptjs");
-const router   = express.Router();
-const db       = require("../db");
+const express = require("express");
+const bcrypt  = require("bcryptjs");
+const router  = express.Router();
+const db      = require("../db");
 
 /* ── Middleware ── */
 function requireAuth(req, res, next) {
@@ -9,11 +9,11 @@ function requireAuth(req, res, next) {
   res.status(401).json({ error: "Not authenticated" });
 }
 
-function requireAdmin(req, res, next) {
+async function requireAdmin(req, res, next) {
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ error: "Not authenticated" });
   }
-  const user = db.users.findById(req.session.userId);
+  const user = await db.users.findById(req.session.userId);
   if (!user || user.role !== "admin") {
     return res.status(403).json({ error: "Admin access required" });
   }
@@ -35,17 +35,16 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
 
-    const allUsers    = db.users.getAll();
+    const allUsers    = await db.users.getAll();
     const isFirstUser = allUsers.length === 0;
     const hashed      = await bcrypt.hash(password, 12);
-    const user        = db.users.create(username, hashed);
+    let   user        = await db.users.create(username, hashed);
 
     if (isFirstUser) {
-      db.users.updateRole(user.id, "admin");
-      user.role = "admin";
+      user = await db.users.updateRole(user._id, "admin");
     }
 
-    req.session.userId   = user.id;
+    req.session.userId   = String(user._id);
     req.session.username = user.username;
     req.session.role     = user.role;
 
@@ -66,7 +65,7 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Username and password required" });
     }
 
-    const user = db.users.findByUsername(username);
+    const user = await db.users.findByUsername(username);
     if (!user) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
@@ -76,7 +75,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
-    req.session.userId   = user.id;
+    req.session.userId   = String(user._id);
     req.session.username = user.username;
     req.session.role     = user.role;
 
@@ -109,9 +108,9 @@ router.get("/me", (req, res) => {
 });
 
 /* ── GET /auth/profile ── */
-router.get("/profile", requireAuth, (req, res) => {
+router.get("/profile", requireAuth, async (req, res) => {
   try {
-    const profile = db.users.getProfile(req.session.userId);
+    const profile = await db.users.getProfile(req.session.userId);
     if (!profile) return res.status(404).json({ error: "User not found" });
     res.json(profile);
   } catch (err) {
@@ -120,31 +119,18 @@ router.get("/profile", requireAuth, (req, res) => {
 });
 
 /* ── PUT /auth/profile ── */
-router.put("/profile", requireAuth, (req, res) => {
+router.put("/profile", requireAuth, async (req, res) => {
   try {
     const {
-      display_name,
-      company,
-      job_title,
-      department,
-      email,
-      phone,
-      location,
-      bio,
+      display_name, company, job_title,
+      department, email, phone, location, bio,
     } = req.body;
 
-    const updated = db.users.updateProfile(req.session.userId, {
-      display_name,
-      company,
-      job_title,
-      department,
-      email,
-      phone,
-      location,
-      bio,
+    const updated = await db.users.updateProfile(req.session.userId, {
+      display_name, company, job_title,
+      department, email, phone, location, bio,
     });
 
-    // Update session display name if changed
     if (display_name !== undefined) {
       req.session.displayName = display_name;
     }
@@ -168,7 +154,7 @@ router.put("/password", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "New password must be at least 6 characters" });
     }
 
-    const user = db.users.findById(req.session.userId);
+    const user = await db.users.findById(req.session.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const valid = await bcrypt.compare(current_password, user.password);
@@ -177,7 +163,7 @@ router.put("/password", requireAuth, async (req, res) => {
     }
 
     const hashed = await bcrypt.hash(new_password, 12);
-    db.users.updatePassword(req.session.userId, hashed);
+    await db.users.updatePassword(req.session.userId, hashed);
 
     res.json({ message: "Password changed successfully" });
   } catch (err) {
@@ -186,22 +172,22 @@ router.put("/password", requireAuth, async (req, res) => {
 });
 
 /* ── GET /auth/users (admin) ── */
-router.get("/users", requireAdmin, (req, res) => {
+router.get("/users", requireAdmin, async (req, res) => {
   try {
-    res.json(db.users.getAll());
+    res.json(await db.users.getAll());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 /* ── DELETE /auth/users/:id (admin) ── */
-router.delete("/users/:id", requireAdmin, (req, res) => {
+router.delete("/users/:id", requireAdmin, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = req.params.id;
     if (id === req.session.userId) {
       return res.status(400).json({ error: "Cannot delete your own account" });
     }
-    const deleted = db.users.delete(id);
+    const deleted = await db.users.delete(id);
     if (!deleted) return res.status(404).json({ error: "User not found" });
     res.json({ message: "User deleted" });
   } catch (err) {
@@ -210,14 +196,14 @@ router.delete("/users/:id", requireAdmin, (req, res) => {
 });
 
 /* ── PUT /auth/users/:id/role (admin) ── */
-router.put("/users/:id/role", requireAdmin, (req, res) => {
+router.put("/users/:id/role", requireAdmin, async (req, res) => {
   try {
-    const id       = parseInt(req.params.id);
+    const id       = req.params.id;
     const { role } = req.body;
     if (!["user", "admin"].includes(role)) {
       return res.status(400).json({ error: "Role must be 'user' or 'admin'" });
     }
-    const user = db.users.updateRole(id, role);
+    const user = await db.users.updateRole(id, role);
     res.json({ message: "Role updated", user });
   } catch (err) {
     res.status(500).json({ error: err.message });

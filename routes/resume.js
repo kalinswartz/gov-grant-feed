@@ -106,7 +106,7 @@ router.post("/parse", upload.single("resume"), async (req, res) => {
       - email          (email address)
       - phone          (phone number)
       - location       (city and state, e.g. "College Station, TX")
-      - bio            (write a 2-3 sentence professional summary based on their experience, max 300 chars)
+      - bio            (write a 2-3 sentence professional summary based on their experience, including their skills, max 400 chars)
 
       Resume text:
       ---
