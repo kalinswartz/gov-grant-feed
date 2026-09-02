@@ -124,7 +124,7 @@ if (Array.isArray(fields.projects)) {
     .map((p) => ({
       title:       String(p.title       || "").trim().slice(0, 200),
       description: String(p.description || "").trim().slice(0, 500),
-      year:        String(p.year        || "").trim().slice(0, 10),
+      year:        String(p.year        || "").trim().slice(0, 15),
       role:        String(p.role        || "").trim().slice(0, 200),
     }));
 }
