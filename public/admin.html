@@ -229,7 +229,7 @@
       }
 
       tbody.innerHTML = users.map(function(u) {
-        var isMe = u.id === currentUserId;
+        var isMe = String(u.id) === String(currentUserId);
 
         /* ── ID cell ── */
         var idCell = "<td style='color:var(--muted)'>" + u.id + "</td>";
@@ -258,15 +258,15 @@
           /* Role toggle button */
           if (u.role === "admin") {
             actions +=
-              "<button class='btn-role' onclick='setRole(" + u.id + ", \"user\")'>Make User</button>";
+              "<button class='btn-role' onclick='setRole(\"" + u.id + "\", \"user\")'>Make User</button>";
           } else {
             actions +=
-              "<button class='btn-role' onclick='setRole(" + u.id + ", \"admin\")'>Make Admin</button>";
+              "<button class='btn-role' onclick='setRole(\"" + u.id + "\", \"admin\")'>Make Admin</button>";
           }
 
           /* Delete button */
           actions +=
-            "<button class='btn-danger' onclick='deleteUser(" + u.id + ", \"" +
+            "<button class='btn-danger' onclick='deleteUser(\"" + u.id + "\", \"" +
             escHtml(u.username) + "\")'>Delete</button>";
         } else {
           actions = "<span style='color:var(--muted);font-size:0.75rem'>—</span>";
