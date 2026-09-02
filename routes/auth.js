@@ -121,14 +121,17 @@ router.get("/profile", requireAuth, async (req, res) => {
 /* ── PUT /auth/profile ── */
 router.put("/profile", requireAuth, async (req, res) => {
   try {
+
     const {
       display_name, company, job_title,
       department, email, phone, location, bio,
+      interests, expertise, projects,
     } = req.body;
 
     const updated = await db.users.updateProfile(req.session.userId, {
       display_name, company, job_title,
       department, email, phone, location, bio,
+      interests, expertise, projects,
     });
 
     if (display_name !== undefined) {

@@ -835,6 +835,54 @@ async function showUserProfile(userId) {
             '</div>'
           : "") +
 
+(u.interests && u.interests.length > 0
+  ? '<div style="margin-top:12px">' +
+      '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+           'text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Research Interests</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+        u.interests.map(function(t) {
+          return '<span style="background:rgba(79,142,247,.15);border:1px solid rgba(79,142,247,.35);' +
+            'color:var(--accent);border-radius:20px;padding:2px 10px;font-size:0.75rem;font-weight:600">' +
+            escHtml(t) + '</span>';
+        }).join("") +
+      '</div>' +
+    '</div>'
+  : "") +
+
+(u.expertise && u.expertise.length > 0
+  ? '<div style="margin-top:12px">' +
+      '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+           'text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Skills & Expertise</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+        u.expertise.map(function(t) {
+          return '<span style="background:rgba(62,207,142,.15);border:1px solid rgba(62,207,142,.35);' +
+            'color:var(--green);border-radius:20px;padding:2px 10px;font-size:0.75rem;font-weight:600">' +
+            escHtml(t) + '</span>';
+        }).join("") +
+      '</div>' +
+    '</div>'
+  : "") +
+
+(u.projects && u.projects.length > 0
+  ? '<div style="margin-top:12px">' +
+      '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+           'text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Recent Projects</div>' +
+      u.projects.map(function(p) {
+        return '<div style="background:var(--surface2);border:1px solid var(--border);' +
+          'border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">' +
+          '<div style="font-weight:600;font-size:0.88rem">' + escHtml(p.title) +
+            (p.year ? ' <span style="color:var(--muted);font-weight:400;font-size:0.78rem">(' +
+              escHtml(p.year) + ')</span>' : '') +
+          '</div>' +
+          (p.role ? '<div style="color:var(--accent);font-size:0.78rem;margin-top:2px">' +
+            escHtml(p.role) + '</div>' : '') +
+          (p.description ? '<div style="color:var(--muted);font-size:0.82rem;margin-top:4px;' +
+            'line-height:1.5">' + escHtml(p.description) + '</div>' : '') +
+          '</div>';
+      }).join("") +
+    '</div>'
+  : "") +
+
         '<div style="margin-top:4px;font-size:0.72rem;color:var(--muted)">' +
           'Member since ' + formatDateTime(u.created_at) +
         '</div>' +

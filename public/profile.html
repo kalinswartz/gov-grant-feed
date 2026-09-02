@@ -253,6 +253,103 @@
     font-style: italic;
   }
 
+    /* ── Tags (interests/expertise) ── */
+  .tag-input-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface2);
+    min-height: 44px;
+    cursor: text;
+  }
+
+  .tag-input-wrap:focus-within {
+    border-color: var(--accent);
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(79,142,247,.15);
+    border: 1px solid rgba(79,142,247,.35);
+    color: var(--accent);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .tag-remove {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.7;
+  }
+
+  .tag-remove:hover { opacity: 1; }
+
+  .tag-text-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 0.88rem;
+    min-width: 120px;
+    flex: 1;
+  }
+
+  .tag-hint {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── Projects ── */
+  .project-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .project-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .project-card-header span {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  .project-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .project-fields .full {
+    grid-column: 1 / -1;
+  }
+
+  @media (max-width: 560px) {
+    .project-fields { grid-template-columns: 1fr; }
+  }
+
     </style>
   </head>
 
@@ -392,6 +489,70 @@
         </div>
       </div>
 
+      <!-- Research Interests Card -->
+<div class="profile-card">
+  <h3>🔬 Research Interests</h3>
+  <div id="interests-alert" class="alert"></div>
+  <div class="form-group">
+    <label>Interests
+      <span style="color:var(--muted);font-weight:400;text-transform:none;
+                   letter-spacing:0"> — press Enter or comma to add</span>
+    </label>
+    <div class="tag-input-wrap" id="interests-wrap" onclick="focusTagInput('interests-input')">
+      <!-- tags rendered here -->
+      <input
+        type="text"
+        id="interests-input"
+        class="tag-text-input"
+        placeholder="e.g. Traffic Safety"
+        onkeydown="handleTagKeydown(event, 'interests')"
+      />
+    </div>
+    <div class="tag-hint">Up to 8 interests</div>
+  </div>
+
+  <div class="form-group" style="margin-top:16px">
+    <label>Skills & Expertise
+      <span style="color:var(--muted);font-weight:400;text-transform:none;
+                   letter-spacing:0"> — press Enter or comma to add</span>
+    </label>
+    <div class="tag-input-wrap" id="expertise-wrap" onclick="focusTagInput('expertise-input')">
+      <!-- tags rendered here -->
+      <input
+        type="text"
+        id="expertise-input"
+        class="tag-text-input"
+        placeholder="e.g. Traffic Simulation"
+        onkeydown="handleTagKeydown(event, 'expertise')"
+      />
+    </div>
+    <div class="tag-hint">Up to 10 skills</div>
+  </div>
+
+  <div class="form-actions">
+    <button class="btn-primary" id="save-tags-btn" onclick="saveTags()">
+      Save Interests & Expertise
+    </button>
+  </div>
+</div>
+
+<!-- Projects Card -->
+<div class="profile-card">
+  <h3>📁 Recent Projects</h3>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+    Up to 3 recent or relevant projects. These can be auto-filled from your resume.
+  </p>
+  <div id="projects-alert" class="alert"></div>
+  <div id="projects-container">
+    <!-- project cards rendered here -->
+  </div>
+  <div class="form-actions">
+    <button class="btn-primary" id="save-projects-btn" onclick="saveProjects()">
+      Save Projects
+    </button>
+  </div>
+</div>
+
       <!-- Change Password Card -->
       <div class="profile-card">
         <h3>Change Password</h3>
@@ -426,6 +587,8 @@
 
     <script>
       var originalProfile = {};
+      var interestTags = [];
+      var expertiseTags = [];
 
       /* ── Init ── */
       (async function() {
@@ -489,6 +652,12 @@
           /* Update bio char count */
           var bioEl = document.getElementById("bio");
           updateCharCount(bioEl, "bio-count", 500);
+
+          interestTags = data.interests || [];
+          expertiseTags = data.expertise || [];
+          renderTags("interests", interestTags);
+          renderTags("expertise", expertiseTags);
+          renderProjects(data.projects || []);
 
         } catch(err) {
           showAlert("profile-alert", "Failed to load profile: " + err.message, "error");
@@ -616,6 +785,11 @@
         setValue("bio",           originalProfile.bio);
         var bioEl = document.getElementById("bio");
         updateCharCount(bioEl, "bio-count", 500);
+        interestTags  = originalProfile.interests || [];
+        expertiseTags = originalProfile.expertise || [];
+        renderTags("interests",  interestTags);
+        renderTags("expertise",  expertiseTags);
+        renderProjects(originalProfile.projects || []);
       }
 
       /* ── Helpers ── */
@@ -723,9 +897,10 @@ async function handleResumeFile(file) {
   } catch(err) {
     document.getElementById("resume-drop-zone").style.display = "";
     document.getElementById("resume-parsing").style.display  = "none";
-    showAlert("resume-alert", "❌ " + err.message, "error");
 
-    // Reset file input so same file can be re-tried
+    // Show the exact error message from the server
+    var msg = err.message || "Failed to parse resume";
+    showAlert("resume-alert", msg.startsWith("⚠️") ? msg : "❌ " + msg, "error");
     document.getElementById("resume-file").value = "";
   }
 }
@@ -820,6 +995,301 @@ function escHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+    /* ════════════════════════════
+   Tag Input (Interests + Expertise)
+════════════════════════════ */
+function focusTagInput(inputId) {
+  document.getElementById(inputId).focus();
+}
+
+function handleTagKeydown(e, type) {
+  if (e.key === "Enter" || e.key === ",") {
+    e.preventDefault();
+    var input = document.getElementById(type + "-input");
+    var val   = input.value.trim().replace(/,/g, "");
+    if (!val) return;
+
+    var tags   = type === "interests" ? interestTags : expertiseTags;
+    var maxLen = type === "interests" ? 8 : 10;
+
+    if (tags.length >= maxLen) {
+      showAlert(type === "interests" ? "interests-alert" : "projects-alert",
+        "Maximum " + maxLen + " " + type + " allowed", "error");
+      return;
+    }
+
+    if (!tags.includes(val)) {
+      tags.push(val);
+      if (type === "interests") interestTags = tags;
+      else                      expertiseTags = tags;
+      renderTags(type, tags);
+    }
+
+    input.value = "";
+  }
+
+  // Backspace on empty input removes last tag
+  if (e.key === "Backspace") {
+    var input = document.getElementById(type + "-input");
+    if (input.value === "") {
+      var tags = type === "interests" ? interestTags : expertiseTags;
+      tags.pop();
+      if (type === "interests") interestTags = tags;
+      else                      expertiseTags = tags;
+      renderTags(type, tags);
+    }
+  }
+}
+
+function removeTag(type, index) {
+  if (type === "interests") interestTags.splice(index, 1);
+  else                      expertiseTags.splice(index, 1);
+  renderTags(type, type === "interests" ? interestTags : expertiseTags);
+}
+
+  function renderTags(type, tags) {
+    var wrap  = document.getElementById(type + "-wrap");
+    var input = document.getElementById(type + "-input");
+
+    // Remove existing tag elements (keep the input)
+    var existing = wrap.querySelectorAll(".tag");
+    existing.forEach(function(el) { el.remove(); });
+
+    // Add tags before input
+    tags.forEach(function(tag, idx) {
+      var span       = document.createElement("span");
+      span.className = "tag";
+      span.innerHTML =
+        escHtml(tag) +
+        '<button class="tag-remove" onclick="removeTag(\'' + type + '\', ' + idx + ')" ' +
+          'title="Remove">×</button>';
+      wrap.insertBefore(span, input);
+    });
+  }
+
+  /* ── Save Interests + Expertise ── */
+  async function saveTags() {
+    var btn         = document.getElementById("save-tags-btn");
+    btn.disabled    = true;
+    btn.textContent = "Saving...";
+
+    // Add any pending text in the input fields
+    var interestInput = document.getElementById("interests-input");
+    var expertiseInput = document.getElementById("expertise-input");
+
+    if (interestInput.value.trim()) {
+      interestTags.push(interestInput.value.trim());
+      interestInput.value = "";
+      renderTags("interests", interestTags);
+    }
+    if (expertiseInput.value.trim()) {
+      expertiseTags.push(expertiseInput.value.trim());
+      expertiseInput.value = "";
+      renderTags("expertise", expertiseTags);
+    }
+
+    try {
+      var res  = await fetch("/auth/profile", {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          interests: interestTags,
+          expertise: expertiseTags,
+        }),
+      });
+
+      var data = await res.json();
+
+      if (!res.ok) {
+        showAlert("interests-alert", data.error || "Save failed.", "error");
+        return;
+      }
+
+      originalProfile.interests = interestTags;
+      originalProfile.expertise = expertiseTags;
+      showAlert("interests-alert", "✅ Interests & expertise saved!", "success");
+    } catch(err) {
+      showAlert("interests-alert", "Save failed: " + err.message, "error");
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = "Save Interests & Expertise";
+    }
+  }
+
+  /* ════════════════════════════
+     Projects
+  ════════════════════════════ */
+  function renderProjects(projects) {
+    var container = document.getElementById("projects-container");
+    container.innerHTML = "";
+
+    // Always show 3 project slots
+    for (var i = 0; i < 3; i++) {
+      var p = projects[i] || { title: "", description: "", year: "", role: "" };
+      container.appendChild(buildProjectCard(i, p));
+    }
+  }
+
+  function buildProjectCard(idx, project) {
+    var div       = document.createElement("div");
+    div.className = "project-card";
+    div.innerHTML =
+      '<div class="project-card-header">' +
+        '<span>Project ' + (idx + 1) + '</span>' +
+      '</div>' +
+      '<div class="project-fields">' +
+        '<div class="form-group full">' +
+          '<label>Title</label>' +
+          '<input type="text" id="proj-' + idx + '-title" ' +
+            'value="' + escHtml(project.title || "") + '" ' +
+            'placeholder="e.g. Connected Vehicle Safety Study" maxlength="200" />' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label>Your Role</label>' +
+          '<input type="text" id="proj-' + idx + '-role" ' +
+            'value="' + escHtml(project.role || "") + '" ' +
+            'placeholder="e.g. Principal Investigator" maxlength="200" />' +
+        '</div>' +
+        '<div class="form-group">' +
+          '<label>Year</label>' +
+          '<input type="text" id="proj-' + idx + '-year" ' +
+            'value="' + escHtml(project.year || "") + '" ' +
+            'placeholder="e.g. 2023" maxlength="15" />' +
+        '</div>' +
+        '<div class="form-group full">' +
+          '<label>Description</label>' +
+          '<textarea id="proj-' + idx + '-description" ' +
+            'placeholder="Brief description of the project..." ' +
+            'maxlength="500" style="min-height:70px">' +
+            escHtml(project.description || "") +
+          '</textarea>' +
+        '</div>' +
+      '</div>';
+    return div;
+  }
+
+  /* ── Save Projects ── */
+  async function saveProjects() {
+    var btn         = document.getElementById("save-projects-btn");
+    btn.disabled    = true;
+    btn.textContent = "Saving...";
+
+    var projects = [];
+    for (var i = 0; i < 3; i++) {
+      var title = (document.getElementById("proj-" + i + "-title")?.value || "").trim();
+      var role  = (document.getElementById("proj-" + i + "-role")?.value  || "").trim();
+      var year  = (document.getElementById("proj-" + i + "-year")?.value  || "").trim();
+      var desc  = (document.getElementById("proj-" + i + "-description")?.value || "").trim();
+
+      // Only include project if it has at least a title
+      if (title) {
+        projects.push({ title, role, year, description: desc });
+      }
+    }
+
+    try {
+      var res  = await fetch("/auth/profile", {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ projects: projects }),
+      });
+
+      var data = await res.json();
+
+      if (!res.ok) {
+        showAlert("projects-alert", data.error || "Save failed.", "error");
+        return;
+      }
+
+      originalProfile.projects = projects;
+      showAlert("projects-alert", "✅ Projects saved!", "success");
+    } catch(err) {
+      showAlert("projects-alert", "Save failed: " + err.message, "error");
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = "Save Projects";
+    }
+  }
+
+  /* ── Resume preview — update showResumePreview to include new fields ── */
+  // Override the existing showResumePreview to also handle interests/expertise/projects
+  var _origShowResumePreview = showResumePreview;
+  showResumePreview = function(profile) {
+    _origShowResumePreview(profile);
+
+    // Add interests/expertise/projects to preview if present
+    var grid = document.getElementById("resume-preview-grid");
+    if (!grid) return;
+
+    if (profile.interests && profile.interests.length > 0) {
+      var div       = document.createElement("div");
+      div.className = "form-group full-width";
+      div.innerHTML =
+        '<label>Research Interests (AI extracted)</label>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">' +
+          profile.interests.map(function(t) {
+            return '<span class="tag">' + escHtml(t) + '</span>';
+          }).join("") +
+        '</div>';
+      grid.appendChild(div);
+    }
+
+    if (profile.expertise && profile.expertise.length > 0) {
+      var div2       = document.createElement("div");
+      div2.className = "form-group full-width";
+      div2.innerHTML =
+        '<label>Skills & Expertise (AI extracted)</label>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">' +
+          profile.expertise.map(function(t) {
+            return '<span class="tag" style="background:rgba(62,207,142,.15);' +
+              'border-color:rgba(62,207,142,.35);color:var(--green)">' +
+              escHtml(t) + '</span>';
+          }).join("") +
+        '</div>';
+      grid.appendChild(div2);
+    }
+
+    if (profile.projects && profile.projects.length > 0) {
+      var div3       = document.createElement("div");
+      div3.className = "form-group full-width";
+      div3.innerHTML =
+        '<label>Projects (AI extracted)</label>' +
+        profile.projects.map(function(p) {
+          return '<div style="background:var(--surface2);border:1px solid var(--border);' +
+            'border-radius:var(--radius);padding:10px 12px;margin-top:6px;font-size:0.85rem">' +
+            '<strong>' + escHtml(p.title) + '</strong>' +
+            (p.year ? ' <span style="color:var(--muted)">(' + escHtml(p.year) + ')</span>' : '') +
+            (p.role ? '<div style="color:var(--accent);font-size:0.78rem">' + escHtml(p.role) + '</div>' : '') +
+            (p.description ? '<div style="color:var(--muted);margin-top:4px">' + escHtml(p.description) + '</div>' : '') +
+            '</div>';
+        }).join("") +
+      '</div>';
+      grid.appendChild(div3);
+    }
+  };
+
+  /* ── Resume apply — also apply interests/expertise/projects ── */
+  var _origApplyResume = applyResumeToProfile;
+  applyResumeToProfile = function() {
+    _origApplyResume();
+
+    if (!parsedResumeData) return;
+
+    if (parsedResumeData.interests && parsedResumeData.interests.length > 0) {
+      interestTags = parsedResumeData.interests;
+      renderTags("interests", interestTags);
+    }
+
+    if (parsedResumeData.expertise && parsedResumeData.expertise.length > 0) {
+      expertiseTags = parsedResumeData.expertise;
+      renderTags("expertise", expertiseTags);
+    }
+
+    if (parsedResumeData.projects && parsedResumeData.projects.length > 0) {
+      renderProjects(parsedResumeData.projects);
+    }
+  };
     </script>
   </body>
 </html>

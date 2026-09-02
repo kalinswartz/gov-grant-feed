@@ -64,41 +64,72 @@ const db = {
       }
     },
 
-    async getPublicProfile(id) {
-      try {
-        const user = await User.findById(id, { password: 0 }).lean();
-        if (!user) return null;
-        return {
-          id:           user._id,
-          username:     user.username,
-          display_name: user.display_name || "",
-          company:      user.company      || "",
-          job_title:    user.job_title    || "",
-          department:   user.department   || "",
-          email:        user.email        || "",
-          location:     user.location     || "",
-          bio:          user.bio          || "",
-          role:         user.role,
-          created_at:   user.created_at,
-        };
-      } catch {
-        return null;
-      }
-    },
+    // REPLACE WITH
+async getPublicProfile(id) {
+  try {
+    const user = await User.findById(id, { password: 0 }).lean();
+    if (!user) return null;
+    return {
+      id:           user._id,
+      username:     user.username,
+      display_name: user.display_name || "",
+      company:      user.company      || "",
+      job_title:    user.job_title    || "",
+      department:   user.department   || "",
+      email:        user.email        || "",
+      location:     user.location     || "",
+      bio:          user.bio          || "",
+      role:         user.role,
+      created_at:   user.created_at,
+      interests:    user.interests    || [],
+      expertise:    user.expertise    || [],
+      projects:     user.projects     || [],
+    };
+  } catch {
+    return null;
+  }
+},
 
     async updateProfile(id, fields) {
-      const allowed = [
-        "display_name", "company", "job_title",
-        "department", "email", "phone", "location", "bio",
-      ];
-      const update = { updated_at: new Date() };
-      allowed.forEach((f) => {
-        if (fields[f] !== undefined) {
-          update[f] = String(fields[f]).trim().slice(0, 200);
-        }
-      });
+      // REPLACE WITH
+const allowed = [
+  "display_name", "company", "job_title",
+  "department", "email", "phone", "location", "bio",
+];
+const update = { updated_at: new Date() };
+allowed.forEach((f) => {
+  if (fields[f] !== undefined) {
+    update[f] = String(fields[f]).trim().slice(0, 200);
+  }
+});
 
-      const user = await User.findByIdAndUpdate(id, update, { new: true }).lean();
+// Arrays — interests and expertise
+if (Array.isArray(fields.interests)) {
+  update.interests = fields.interests
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+if (Array.isArray(fields.expertise)) {
+  update.expertise = fields.expertise
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+// Projects array
+if (Array.isArray(fields.projects)) {
+  update.projects = fields.projects
+    .slice(0, 3)
+    .map((p) => ({
+      title:       String(p.title       || "").trim().slice(0, 200),
+      description: String(p.description || "").trim().slice(0, 500),
+      year:        String(p.year        || "").trim().slice(0, 10),
+      role:        String(p.role        || "").trim().slice(0, 200),
+    }));
+}
+
+      const user = await User.findByIdAndUpdate(id, update, {returnDocument: "after" }).lean();
       if (!user) throw new Error("User not found");
       return { ...user, id: user._id };
     },
@@ -123,7 +154,7 @@ const db = {
 
     async updateRole(id, role) {
       const user = await User.findByIdAndUpdate(
-        id, { role }, { new: true }
+        id, { role }, { returnDocument: "after" }
       ).lean();
       if (!user) throw new Error("User not found");
       return { ...user, id: user._id };

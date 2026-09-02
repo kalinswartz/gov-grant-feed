@@ -93,10 +93,11 @@ router.post("/parse", upload.single("resume"), async (req, res) => {
 
     // Send to Gemini
     const model  = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
+
     const prompt = `
       Extract the following information from this resume text and return ONLY
       a valid JSON object with these exact keys. If a field cannot be found,
-      use an empty string "".
+      use an empty string "" or empty array [].
 
       Keys to extract:
       - display_name   (full name)
@@ -106,7 +107,14 @@ router.post("/parse", upload.single("resume"), async (req, res) => {
       - email          (email address)
       - phone          (phone number)
       - location       (city and state, e.g. "College Station, TX")
-      - bio            (write a 2-3 sentence professional summary based on their experience, including their skills, max 400 chars)
+      - bio            (write a 2-3 sentence professional summary based on their experience, max 400 chars)
+      - interests      (array of up to 8 research interests or professional interests as short strings)
+      - expertise      (array of up to 10 skills or areas of expertise as short strings)
+      - projects       (array of up to 3 most recent or relevant projects, each with:
+                        title: project name
+                        description: 1-2 sentence description, max 200 chars
+                        year: year or year range e.g. "2023" or "2022-2023"
+                        role: their role on the project e.g. "Principal Investigator")
 
       Resume text:
       ---
@@ -114,6 +122,8 @@ router.post("/parse", upload.single("resume"), async (req, res) => {
       ---
 
       Return ONLY the JSON object, no markdown, no explanation, no code blocks.
+      For interests and expertise return arrays of strings.
+      For projects return an array of objects with title, description, year, role keys.
     `;
 
     const result = await model.generateContent({
@@ -142,15 +152,34 @@ router.post("/parse", upload.single("resume"), async (req, res) => {
     }
 
     // Sanitize
-    const allowed = ["display_name", "job_title", "company", "department",
-                     "email", "phone", "location", "bio"];
-    const safe = {};
-    allowed.forEach((key) => {
-      safe[key] = String(parsed[key] || "").trim().slice(0, 200);
-    });
-    safe.bio = String(parsed.bio || "").trim().slice(0, 500);
+    // REPLACE WITH
+const allowed = ["display_name", "job_title", "company", "department",
+                 "email", "phone", "location", "bio"];
+const safe = {};
+allowed.forEach((key) => {
+  safe[key] = String(parsed[key] || "").trim().slice(0, 200);
+});
+safe.bio = String(parsed.bio || "").trim().slice(0, 500);
 
-    res.json({ profile: safe });
+// Sanitize arrays
+safe.interests = Array.isArray(parsed.interests)
+  ? parsed.interests.map((s) => String(s).trim()).filter(Boolean).slice(0, 8)
+  : [];
+
+safe.expertise = Array.isArray(parsed.expertise)
+  ? parsed.expertise.map((s) => String(s).trim()).filter(Boolean).slice(0, 10)
+  : [];
+
+safe.projects = Array.isArray(parsed.projects)
+  ? parsed.projects.slice(0, 3).map((p) => ({
+      title:       String(p.title       || "").trim().slice(0, 200),
+      description: String(p.description || "").trim().slice(0, 500),
+      year:        String(p.year        || "").trim().slice(0, 10),
+      role:        String(p.role        || "").trim().slice(0, 200),
+    }))
+  : [];
+
+res.json({ profile: safe });
 
   } catch (err) {
     console.error("[Resume] Error:", err.message);
@@ -159,6 +188,17 @@ router.post("/parse", upload.single("resume"), async (req, res) => {
   }
   if (err.message.includes("too large")) {
     return res.status(400).json({ error: err.message });
+  }
+  if (err.message.includes("503") || err.message.includes("Service Unavailable") || err.message.includes("high demand")) {
+    return res.status(503).json({
+      error: "⚠️ The AI service is currently experiencing high demand. Please try again in a few minutes."
+    });
+  }
+
+  if (err.message.includes("429") || err.message.includes("quota")) {
+    return res.status(429).json({
+      error: "⚠️ AI request limit reached. Please try again later."
+    });
   }
   // Generic message to client, full error only in server logs
   res.status(500).json({ error: "Failed to parse resume — please try again" });
