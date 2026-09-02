@@ -16,6 +16,8 @@ const SESSION_SECRET = process.env.SESSION_SECRET || "change_me_please";
 /* ── Connect to MongoDB ── */
 connectDB();
 
+app.set("trust proxy", 1);
+
 /* ── Middleware ── */
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());

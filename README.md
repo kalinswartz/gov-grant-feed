@@ -22,6 +22,7 @@ PORT=3000
 CRON_SCHEDULE=0 0 * * *
 SESSION_SECRET=your_secret_here
 GEMINI_API_KEY=your_gemini_key_here
+MONGODB_URI=your_mongodb_uri_here
 ```
 
 **Generating a secure `SESSION_SECRET`:**
@@ -125,6 +126,7 @@ gov-grant-feed/
 | `SESSION_SECRET` | **Yes** | Secret key for signing session cookies — must be long and random |
 | `CRON_SCHEDULE` | No | Cron expression for scrape schedule (default: midnight daily) |
 | `GEMINI_API_KEY` | No* | Google Gemini API key for AI resume parsing |
+| `MONGODB_URI` | **Yes** | MongoDB Atlas connection string for persistent data storage |
 
 > App runs fine without `GEMINI_API_KEY` - resume upload feature will be disabled. All other features work normally.
 ---
@@ -162,7 +164,6 @@ messages.json
 
 | Problem | Fix |
 |---|---|
-| `npm install` fails | You're on Node v24 — `better-sqlite3` won't compile, but this app uses JSON files so it doesn't matter. Run `npm install` again. |
 | Feed is empty | Click **⟳ Refresh Now** or wait for startup scrape to finish |
 | Redirected to login immediately | Session expired — log in again |
 | Forgot admin password | Open `users.json`, delete your user entry, restart and re-register |
