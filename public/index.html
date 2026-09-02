@@ -133,6 +133,19 @@
       </div>
     </div>
 
+    <!-- User Profile Modal -->
+<div class="modal-overlay" id="user-profile-modal" onclick="closeUserProfileModal(event)">
+  <div class="modal">
+    <h2>
+      <span>👤 Profile</span>
+      <button class="modal-close" onclick="closeUserProfileModal()">✕</button>
+    </h2>
+    <div id="user-profile-modal-body">
+      <div class="loading"><div class="spinner"></div><span>Loading...</span></div>
+    </div>
+  </div>
+</div>
+
     <script src="/app.js"></script>
   </body>
 </html>

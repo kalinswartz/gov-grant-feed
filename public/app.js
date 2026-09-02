@@ -335,19 +335,27 @@ async function showInterestedUsers(oppId, oppTitle) {
       if (u.company)    subtitle.push(u.company);
       if (u.department) subtitle.push(u.department);
 
-      return '<div class="interest-user-card">' +
-        '<div class="interest-avatar">' + escHtml(initial) + '</div>' +
-        '<div class="interest-user-info">' +
-          '<div class="interest-user-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-            escHtml(name) +
-            (u.role === "admin"
-              ? ' <span class="role-badge-sm">admin</span>'
-              : "") +
-            (u.id !== currentUserId
-              ? ' <button class="btn-outline btn-sm" style="font-size:0.72rem;padding:2px 8px" ' +
-                  'onclick="openMessageFromInterest(' + u.id + ')">💬 Message</button>'
-              : "") +
-          "</div>" +
+
+return '<div class="interest-user-card">' +
+  '<div class="interest-avatar" ' +
+    'style="cursor:pointer" ' +
+    'onclick="showUserProfile(\'' + u.id + '\')">' +
+    escHtml(initial) +
+  '</div>' +
+  '<div class="interest-user-info">' +
+    '<div class="interest-user-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+      '<span style="cursor:pointer;text-decoration:underline;text-underline-offset:2px" ' +
+        'onclick="showUserProfile(\'' + u.id + '\')">' +
+        escHtml(name) +
+      '</span>' +
+      (u.role === "admin"
+        ? ' <span class="role-badge-sm">admin</span>'
+        : "") +
+      (u.id !== currentUserId
+        ? ' <button class="btn-outline btn-sm" style="font-size:0.72rem;padding:2px 8px" ' +
+            'onclick="openMessageFromInterest(\'' + u.id + '\')">💬 Message</button>'
+        : "") +
+    "</div>" +
           (subtitle.length
             ? '<div class="interest-user-sub">' + escHtml(subtitle.join(" · ")) + "</div>"
             : "") +
@@ -745,5 +753,113 @@ async function openMessageFromInterest(targetUserId) {
     window.location.href = "/messages.html?conversation=" + data.conversation_id;
   } catch (err) {
     showToast("❌ " + err.message, "error");
+  }
+}
+
+/* ── User Profile Modal ── */
+async function showUserProfile(userId) {
+  // Close interest modal first
+  document.getElementById("interest-modal").classList.remove("open");
+
+  var modal = document.getElementById("user-profile-modal");
+  var body  = document.getElementById("user-profile-modal-body");
+
+  body.innerHTML =
+    '<div class="loading"><div class="spinner"></div><span>Loading...</span></div>';
+  modal.classList.add("open");
+
+  try {
+    var res  = await fetch("/api/users/" + userId);
+    var u    = await res.json();
+
+    if (!res.ok) throw new Error(u.error || "Failed to load profile");
+
+    var name     = u.display_name || u.username;
+    var initial  = name[0].toUpperCase();
+    var subtitle = [];
+    if (u.job_title)  subtitle.push(u.job_title);
+    if (u.company)    subtitle.push(u.company);
+    if (u.department) subtitle.push(u.department);
+
+    body.innerHTML =
+      // Header
+      '<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;' +
+           'padding-bottom:16px;border-bottom:1px solid var(--border)">' +
+        '<div class="interest-avatar" style="width:56px;height:56px;font-size:1.4rem">' +
+          escHtml(initial) +
+        '</div>' +
+        '<div>' +
+          '<div style="font-size:1.1rem;font-weight:700;color:var(--text);' +
+               'display:flex;align-items:center;gap:8px">' +
+            escHtml(name) +
+            (u.role === "admin"
+              ? ' <span class="role-badge-sm">admin</span>'
+              : "") +
+          '</div>' +
+          (subtitle.length
+            ? '<div style="font-size:0.85rem;color:var(--accent);margin-top:2px">' +
+                escHtml(subtitle.join(" · ")) +
+              '</div>'
+            : "") +
+          '<div style="font-size:0.75rem;color:var(--muted);margin-top:2px">' +
+            '@' + escHtml(u.username) +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // Details
+      '<div style="display:flex;flex-direction:column;gap:10px">' +
+
+        (u.location
+          ? '<div style="display:flex;gap:10px;align-items:center">' +
+              '<span style="color:var(--muted);font-size:0.8rem;min-width:80px">📍 Location</span>' +
+              '<span style="font-size:0.88rem">' + escHtml(u.location) + '</span>' +
+            '</div>'
+          : "") +
+
+        (u.email
+          ? '<div style="display:flex;gap:10px;align-items:center">' +
+              '<span style="color:var(--muted);font-size:0.8rem;min-width:80px">✉️ Email</span>' +
+              '<a href="mailto:' + escHtml(u.email) + '" ' +
+                 'style="font-size:0.88rem;color:var(--accent)">' +
+                escHtml(u.email) +
+              '</a>' +
+            '</div>'
+          : "") +
+
+        (u.bio
+          ? '<div style="margin-top:8px;padding:12px;background:var(--surface2);' +
+               'border-radius:var(--radius);font-size:0.85rem;color:var(--muted);' +
+               'line-height:1.6;font-style:italic">' +
+              escHtml(u.bio) +
+            '</div>'
+          : "") +
+
+        '<div style="margin-top:4px;font-size:0.72rem;color:var(--muted)">' +
+          'Member since ' + formatDateTime(u.created_at) +
+        '</div>' +
+
+      '</div>' +
+
+      // Message button (only show if not viewing own profile)
+      (u.id !== currentUserId
+        ? '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">' +
+            '<button class="btn-primary btn-sm" ' +
+              'onclick="openMessageFromInterest(\'' + u.id + '\')">' +
+              '💬 Send Message' +
+            '</button>' +
+          '</div>'
+        : "");
+
+  } catch(err) {
+    body.innerHTML =
+      '<p style="color:var(--red);text-align:center;padding:24px">' +
+      '⚠️ Failed to load profile: ' + escHtml(err.message) + '</p>';
+  }
+}
+
+function closeUserProfileModal(event) {
+  if (!event || event.target === event.currentTarget) {
+    document.getElementById("user-profile-modal").classList.remove("open");
   }
 }
