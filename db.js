@@ -91,7 +91,6 @@ async getPublicProfile(id) {
 },
 
     async updateProfile(id, fields) {
-      // REPLACE WITH
 const allowed = [
   "display_name", "company", "job_title",
   "department", "email", "phone", "location", "bio",
@@ -102,6 +101,11 @@ allowed.forEach((f) => {
     update[f] = String(fields[f]).trim().slice(0, 200);
   }
 });
+
+// Bio has longer limit
+if (fields.bio !== undefined) {
+  update.bio = String(fields.bio).trim().slice(0, 500);
+}
 
 // Arrays — interests and expertise
 if (Array.isArray(fields.interests)) {

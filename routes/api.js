@@ -155,6 +155,7 @@ router.get("/my-interests", async (req, res) => {
     const opps = await Promise.all(
       oppIds.map((id) => db.opportunities.findById(id))
     );
+    const counts = await db.interests.getCounts(oppIds);
 
     const results = opps
       .filter(Boolean)
@@ -168,7 +169,7 @@ router.get("/my-interests", async (req, res) => {
       .map((r) => ({
         ...r,
         id:             String(r._id || r.id),
-        interest_count:  0,
+        interest_count:  counts[String(r._id || r.id)] || 0,
         user_interested: true,
       }));
 
