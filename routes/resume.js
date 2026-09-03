@@ -92,7 +92,7 @@ router.post("/parse", upload.single("resume"), async (req, res) => {
     const trimmedText = text.slice(0, 8000);
 
     // Send to Gemini
-    const model  = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
+    const model  = genAI.getGenerativeModel({ model: "gemini-3.5-flash-lite" });
 
     const prompt = `
       Extract the following information from this resume text and return ONLY
