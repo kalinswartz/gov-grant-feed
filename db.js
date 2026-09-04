@@ -64,7 +64,7 @@ const db = {
       }
     },
 
-    // REPLACE WITH
+
 async getPublicProfile(id) {
   try {
     const user = await User.findById(id, { password: 0 }).lean();
@@ -93,7 +93,7 @@ async getPublicProfile(id) {
     async updateProfile(id, fields) {
 const allowed = [
   "display_name", "company", "job_title",
-  "department", "email", "phone", "location", "bio",
+  "department", "email", "phone", "location", 
 ];
 const update = { updated_at: new Date() };
 allowed.forEach((f) => {
@@ -499,52 +499,84 @@ if (Array.isArray(fields.projects)) {
       }
     },
 
-    async find(filters = {}) {
-      const query = {};
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
 
-      if (filters.source) query.source = filters.source;
+async find(filters = {}) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split("T")[0];
 
-      if (filters.search) {
-        query.$or = [
-          { title:   new RegExp(filters.search, "i") },
-          { summary: new RegExp(filters.search, "i") },
-          { agency:  new RegExp(filters.search, "i") },
-        ];
-      }
-
-      if (filters.agency) {
-        query.agency = new RegExp(filters.agency, "i");
-      }
-
-      // Filter out expired grants
-      query.$or = query.$or || [];
-      const dateFilter = {
-        $or: [
-          { close_date: null },
-          { close_date: "" },
-          { close_date: { $gte: today.toISOString().split("T")[0] } },
-        ],
-      };
-
-      let sort = { fetched_at: -1 };
-      if (filters.sort === "close_date") {
-        sort = { close_date: 1 };
-      }
-
-      const total = await Opportunity.countDocuments({ ...query, ...dateFilter });
-      const rows  = await Opportunity.find({ ...query, ...dateFilter })
-        .sort(sort)
-        .skip(filters.offset || 0)
-        .limit(filters.limit || 20)
-        .lean();
-
-      return {
-        total,
-        rows: rows.map((r) => ({ ...r, id: r._id })),
-      };
+  // Always apply expired filter
+  const conditions = [
+    {
+      $or: [
+        { close_date: null },
+        { close_date: "" },
+        { close_date: { $gte: todayStr } },
+      ],
     },
+  ];
+
+  // Source filter
+  if (filters.source) {
+    conditions.push({ source: filters.source });
+  }
+
+  // Agency filter
+  if (filters.agency) {
+    conditions.push({ agency: new RegExp(filters.agency, "i") });
+  }
+
+  // Search filter — split by comma or semicolon
+if (filters.search) {
+  const terms = filters.search
+    .split(/[,;]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  if (terms.length === 1) {
+    // Single term
+    conditions.push({
+      $or: [
+        { title:            new RegExp(terms[0], "i") },
+        { summary:          new RegExp(terms[0], "i") },
+        { agency:           new RegExp(terms[0], "i") },
+      ],
+    });
+  } else {
+    // Multiple terms — match grants that contain ANY of the terms
+    conditions.push({
+      $or: terms.map((term) => ({
+        $or: [
+          { title:            new RegExp(term, "i") },
+          { summary:          new RegExp(term, "i") },
+          { agency:           new RegExp(term, "i") },
+        ],
+      })),
+    });
+  }
+}
+
+  // All conditions combined with $and
+  const finalQuery = { $and: conditions };
+
+  // Sort
+  let sort = { fetched_at: -1 };
+  if (filters.sort === "close_date") {
+    sort = { close_date: 1 };
+  }
+
+  const total = await Opportunity.countDocuments(finalQuery);
+  const rows  = await Opportunity.find(finalQuery)
+    .sort(sort)
+    .skip(filters.offset || 0)
+    .limit(filters.limit || 20)
+    .lean();
+
+  return {
+    total,
+    rows: rows.map((r) => ({ ...r, id: r._id })),
+  };
+},
 
     async findById(id) {
       try {
@@ -557,30 +589,57 @@ if (Array.isArray(fields.projects)) {
     },
 
     async getAgencies() {
-      const aggs = await Opportunity.aggregate([
-        { $match: { agency: { $nin: [null, ""] } } },
-        { $group: { _id: "$agency", count: { $sum: 1 } } },
-        { $sort:  { count: -1 } },
-        { $project: { agency: "$_id", count: 1, _id: 0 } },
-      ]);
-      return aggs;
+      const today    = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split("T")[0];
+
+  const aggs = await Opportunity.aggregate([
+    {
+      $match: {
+        agency: { $nin: [null, ""] },
+        // Only count non-expired grants
+        $or: [
+          { close_date: null },
+          { close_date: "" },
+          { close_date: { $gte: todayStr } },
+        ],
+      },
+    },
+    { $group: { _id: "$agency", count: { $sum: 1 } } },
+    { $sort:  { count: -1 } },
+    { $project: { agency: "$_id", count: 1, _id: 0 } },
+  ]);
+  return aggs;
     },
 
     async getStats() {
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayStr = today.toISOString();
+  today.setHours(0, 0, 0, 0);
+  const todayStr    = today.toISOString().split("T")[0];
+  const todayFull   = today.toISOString();
 
-      const total    = await Opportunity.countDocuments();
-      const newToday = await Opportunity.countDocuments({
-        fetched_at: { $gte: todayStr },
-      });
-      const bySource = await Opportunity.aggregate([
-        { $group: { _id: "$source", count: { $sum: 1 } } },
-        { $project: { source: "$_id", count: 1, _id: 0 } },
-      ]);
+  const expiredFilter = {
+    $or: [
+      { close_date: null },
+      { close_date: "" },
+      { close_date: { $gte: todayStr } },
+    ],
+  };
 
-      return { total, newToday, bySource };
+  const total    = await Opportunity.countDocuments(expiredFilter);
+const newToday = await Opportunity.countDocuments({
+  $and: [
+    expiredFilter,
+    { fetched_at: { $gte: todayFull } },
+  ],
+});
+  const bySource = await Opportunity.aggregate([
+    { $match: expiredFilter },
+    { $group: { _id: "$source", count: { $sum: 1 } } },
+    { $project: { source: "$_id", count: 1, _id: 0 } },
+  ]);
+
+  return { total, newToday, bySource };
     },
   },
 
