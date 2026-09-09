@@ -11,7 +11,10 @@ document.addEventListener("DOMContentLoaded", function() {
   checkAuth().then(function() {
     loadStats();
     loadAgencies().then(function() { loadFeed(1); });
+    updateRelevantTabLabel();
+    updateInterestTabLabel();
     setInterval(loadStats, 60000);
+    setInterval(updateRelevantTabLabel, 60000);
   });
 });
 
@@ -123,21 +126,119 @@ function switchTab(tab) {
   currentTab = tab;
 
   var feedTab      = document.getElementById("tab-feed");
+  var relevantTab  = document.getElementById("tab-relevant");
   var interestTab  = document.getElementById("tab-interests");
   var controls     = document.getElementById("controls-bar");
   var pagination   = document.getElementById("pagination");
 
+  // Reset all tabs
+  feedTab.classList.remove("tab-active");
+  relevantTab.classList.remove("tab-active");
+  interestTab.classList.remove("tab-active");
+
   if (tab === "feed") {
     feedTab.classList.add("tab-active");
-    interestTab.classList.remove("tab-active");
     controls.style.display = "";
     loadFeed(1);
+  } else if (tab === "relevant") {
+    relevantTab.classList.add("tab-active");
+    controls.style.display = "none";
+    pagination.innerHTML   = "";
+    loadRelevantGrants(1);
   } else {
     interestTab.classList.add("tab-active");
-    feedTab.classList.remove("tab-active");
     controls.style.display = "none";
     pagination.innerHTML   = "";
     loadMyInterests();
+  }
+}
+
+/* ── Relevant Grants Tab ── */
+async function loadRelevantGrants(page) {
+  page        = page || 1;
+  currentPage = page;
+
+  var sort  = document.getElementById("sort-select").value;
+  var limit = document.getElementById("limit-select").value;
+
+  var params = new URLSearchParams({ page: page, limit: limit, sort: sort });
+
+  var feed = document.getElementById("feed");
+  feed.innerHTML =
+    '<div class="loading"><div class="spinner"></div>' +
+    '<span>Finding relevant grants...</span></div>';
+
+  try {
+    var data = await apiFetch("/api/relevant-grants?" + params.toString());
+
+    // User has no interests or expertise set up yet
+    if (data.missing) {
+      feed.innerHTML =
+        '<div class="empty">' +
+          '🎯 No profile interests set up yet.<br>' +
+          '<small style="margin-top:8px;display:block">' +
+            'Add your <strong>Research Interests</strong> and ' +
+            '<strong>Skills & Expertise</strong> on your ' +
+            '<a href="/profile.html" style="color:var(--accent)">profile page</a> ' +
+            'to see grants matched to your field.' +
+          '</small>' +
+        '</div>';
+      return;
+    }
+
+    if (!data.results || data.results.length === 0) {
+      feed.innerHTML =
+        '<div class="empty">' +
+          '🎯 No relevant grants found for your profile.<br>' +
+          '<small style="margin-top:8px;display:block">' +
+            'Try adding more interests or expertise on your ' +
+            '<a href="/profile.html" style="color:var(--accent)">profile page</a>.' +
+          '</small>' +
+        '</div>';
+      return;
+    }
+
+    // Show which terms were matched
+    var termBadges = (data.terms || []).map(function(t) {
+      return '<span class="meta-chip keyword-chip">' + escHtml(t) + '</span>';
+    }).join("");
+
+    feed.innerHTML =
+      '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;' +
+           'align-items:center;gap:8px">' +
+        '<span style="font-size:0.78rem;color:var(--muted)">Matched by:</span>' +
+        termBadges +
+      '</div>';
+
+    var totalPages = data.pages || 1;
+    data.results.forEach(function(item) {
+      var card = buildCard(item);
+
+      // Add matched terms badge to card if available
+      if (item.matched_terms && item.matched_terms.length > 0) {
+        var meta = card.querySelector(".card-meta");
+        if (meta) {
+          var matchBadge      = document.createElement("span");
+          matchBadge.className = "meta-chip keyword-chip";
+          matchBadge.title    = "Matched your profile interests";
+          matchBadge.textContent =
+            "🎯 " + item.matched_terms.slice(0, 2).join(", ") +
+            (item.matched_terms.length > 2
+              ? " +" + (item.matched_terms.length - 2) + " more"
+              : "");
+          meta.appendChild(matchBadge);
+        }
+      }
+
+      feed.appendChild(card);
+    });
+
+    renderPagination(data.page, totalPages);
+
+  } catch (err) {
+    feed.innerHTML =
+      '<div class="empty" style="color:var(--red)">⚠️ Failed to load relevant grants.<br>' +
+      '<small>' + escHtml(err.message) + '</small></div>';
   }
 }
 
@@ -304,6 +405,20 @@ async function updateInterestTabLabel() {
     var total = (data && data.total) ? data.total : 0;
     var tab   = document.getElementById("tab-interests");
     if (tab) tab.textContent = "⭐ My Interests" + (total > 0 ? " (" + total + ")" : "");
+  } catch(e) {}
+}
+
+async function updateRelevantTabLabel() {
+  try {
+    var data = await apiFetch("/api/relevant-grants?limit=1&page=1");
+    var tab  = document.getElementById("tab-relevant");
+    if (!tab) return;
+    if (data.missing) {
+      tab.textContent = "🎯 Relevant Grants";
+    } else {
+      tab.textContent = "🎯 Relevant Grants" +
+        (data.total > 0 ? " (" + data.total + ")" : "");
+    }
   } catch(e) {}
 }
 

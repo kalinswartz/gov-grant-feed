@@ -8,6 +8,10 @@ const {
   Message,
 } = require("./lib/models");
 
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 const db = {
 
   /* ════════════════════════════
@@ -523,7 +527,7 @@ async find(filters = {}) {
 
   // Agency filter
   if (filters.agency) {
-    conditions.push({ agency: new RegExp(filters.agency, "i") });
+    conditions.push({ agency: new RegExp(escapeRegex(filters.agency), "i") });
   }
 
   // Search filter — split by comma or semicolon
@@ -537,9 +541,9 @@ if (filters.search) {
     // Single term
     conditions.push({
       $or: [
-        { title:            new RegExp(terms[0], "i") },
-        { summary:          new RegExp(terms[0], "i") },
-        { agency:           new RegExp(terms[0], "i") },
+        { title:   new RegExp(escapeRegex(terms[0]), "i") },
+      { summary: new RegExp(escapeRegex(terms[0]), "i") },
+      { agency:  new RegExp(escapeRegex(terms[0]), "i") },
       ],
     });
   } else {
@@ -547,9 +551,9 @@ if (filters.search) {
     conditions.push({
       $or: terms.map((term) => ({
         $or: [
-          { title:            new RegExp(term, "i") },
-          { summary:          new RegExp(term, "i") },
-          { agency:           new RegExp(term, "i") },
+          { title:   new RegExp(escapeRegex(term), "i") },
+        { summary: new RegExp(escapeRegex(term), "i") },
+        { agency:  new RegExp(escapeRegex(term), "i") },
         ],
       })),
     });
@@ -560,6 +564,52 @@ if (filters.search) {
   const finalQuery = { $and: conditions };
 
   // Sort
+  let sort = { fetched_at: -1 };
+  if (filters.sort === "close_date") {
+    sort = { close_date: 1 };
+  }
+
+  const total = await Opportunity.countDocuments(finalQuery);
+  const rows  = await Opportunity.find(finalQuery)
+    .sort(sort)
+    .skip(filters.offset || 0)
+    .limit(filters.limit || 20)
+    .lean();
+
+  return {
+    total,
+    rows: rows.map((r) => ({ ...r, id: r._id })),
+  };
+},
+
+async findRelevant(terms, filters = {}) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split("T")[0];
+
+  const conditions = [
+    // Not expired
+    {
+      $or: [
+        { close_date: null },
+        { close_date: "" },
+        { close_date: { $gte: todayStr } },
+      ],
+    },
+    // Match ANY of the user's interest/expertise terms
+    {
+      $or: terms.map((term) => ({
+        $or: [
+          { title:   new RegExp(escapeRegex(term), "i") },
+          { summary: new RegExp(escapeRegex(term), "i") },
+          { agency:  new RegExp(escapeRegex(term), "i") },
+        ],
+      })),
+    },
+  ];
+
+  const finalQuery = { $and: conditions };
+
   let sort = { fetched_at: -1 };
   if (filters.sort === "close_date") {
     sort = { close_date: 1 };

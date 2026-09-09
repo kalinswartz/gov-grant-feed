@@ -198,4 +198,71 @@ router.get("/users/:id", async (req, res) => {
   }
 });
 
+router.get("/relevant-grants", async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const profile = await db.users.getPublicProfile(userId);
+
+    if (!profile) return res.status(404).json({ error: "User not found" });
+
+    const interests = profile.interests || [];
+    const expertise = profile.expertise || [];
+    const terms     = [...interests, ...expertise].filter(Boolean);
+
+    if (terms.length === 0) {
+      return res.json({
+        total:   0,
+        results: [],
+        missing: true, // tell frontend to show setup prompt
+      });
+    }
+
+    const page   = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+    const sort   = req.query.sort === "close_date" ? "close_date" : "fetched_at";
+
+    const { total, rows } = await db.opportunities.findRelevant(terms, {
+      sort,
+      limit,
+      offset,
+    });
+
+    const ids    = rows.map((r) => String(r._id || r.id));
+    const counts = await db.interests.getCounts(ids);
+    const myList = await db.interests.getByUser(userId);
+    const mySet  = new Set(myList.map(String));
+
+    const results = rows.map((r) => ({
+      ...r,
+      id:              String(r._id || r.id),
+      interest_count:  counts[String(r._id || r.id)] || 0,
+      user_interested: mySet.has(String(r._id || r.id)),
+      matched_terms:   getMatchedTerms(r, terms), // which terms matched
+    }));
+
+    res.json({
+      total,
+      page,
+      limit,
+      pages:   Math.ceil(total / limit),
+      results,
+      terms,   // send back what terms were used
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper — find which terms matched this grant
+function getMatchedTerms(grant, terms) {
+  const text = [
+    grant.title   || "",
+    grant.summary || "",
+    grant.agency  || "",
+  ].join(" ").toLowerCase();
+
+  return terms.filter((t) => text.includes(t.toLowerCase()));
+}
+
 module.exports = router;
