@@ -198,7 +198,79 @@ router.get("/users/:id", async (req, res) => {
   }
 });
 
+
+
 router.get("/relevant-grants", async (req, res) => {
+  // Agency keyword mapping — which agencies are relevant to which keywords
+const AGENCY_KEYWORD_MAP = {
+  // DOT agencies — relevant to most transportation keywords
+  "DOT":         ["Transportation", "Highway", "Safety", "Traffic", "Pedestrian",
+                  "Bicycle", "Transit", "Rail", "Aviation", "Maritime", "Freight",
+                  "Trucking", "Mobility", "Autonomous", "Connected", "Infrastructure",
+                  "Pavement", "Bridge", "Corridor", "Intersection", "Signal",
+                  "Planning", "Rural", "Urban", "Multimodal", "Pipeline", "Port",
+                  "Ferry", "Security", "Equity"],
+
+  "FHWA":        ["Highway", "Pavement", "Bridge", "Infrastructure", "Safety",
+                  "Traffic", "Corridor", "Intersection", "Signal", "Planning",
+                  "Rural", "Urban", "Pedestrian", "Bicycle"],
+
+  "NHTSA":       ["Safety", "Autonomous", "Connected", "Traffic", "Pedestrian",
+                  "Bicycle", "Trucking"],
+
+  "FTA":         ["Transit", "Mobility", "Urban", "Rural", "Planning", "Equity",
+                  "Pedestrian", "Bicycle"],
+
+  "FRA":         ["Rail", "Safety", "Infrastructure", "Planning"],
+
+  "FAA":         ["Aviation", "Safety", "Infrastructure", "Planning", "Security"],
+
+  "FMCSA":       ["Trucking", "Freight", "Safety", "Autonomous", "Connected"],
+
+  "MARAD":       ["Maritime", "Port", "Ferry", "Freight", "Infrastructure"],
+
+  "PHMSA":       ["Pipeline", "Safety", "Infrastructure"],
+
+  "BTS":         ["Data", "Transportation", "Planning", "Modeling"],
+
+  "TxDOT":       ["Highway", "Safety", "Traffic", "Infrastructure", "Planning",
+                  "Rural", "Urban", "Bridge", "Pavement"],
+
+  "USDOT":       ["Transportation", "Safety", "Planning", "Equity", "Mobility",
+                  "Infrastructure"],
+
+  "AASHTO":      ["Highway", "Bridge", "Pavement", "Safety", "Planning"],
+
+  "FHWA-RD":     ["Research", "Highway", "Safety", "Pavement", "Bridge"],
+
+  "NSF":         ["Research", "Data", "Modeling", "Simulation", "Engineering",
+                  "Autonomous", "Connected", "Machine Learning", "Sensors",
+                  "Software", "Automation"],
+
+  "DHS":         ["Security", "Infrastructure", "Safety", "Planning"],
+
+  "EPA":         ["Planning", "Urban", "Rural", "Equity", "Infrastructure"],
+
+  "HUD":         ["Urban", "Planning", "Equity", "Mobility", "Transit"],
+
+  "EDA":         ["Rural", "Urban", "Planning", "Infrastructure", "Equity",
+                  "Freight", "Port"],
+
+  "USACE":       ["Infrastructure", "Port", "Maritime", "Bridge", "Planning"],
+};
+
+// Get list of relevant agency codes for a user's terms
+function getRelevantAgencies(terms) {
+  const termSet    = new Set(terms.map((t) => t.toLowerCase()));
+  const agencies   = new Set();
+
+  Object.entries(AGENCY_KEYWORD_MAP).forEach(([agency, keywords]) => {
+    const matches = keywords.some((k) => termSet.has(k.toLowerCase()));
+    if (matches) agencies.add(agency);
+  });
+
+  return [...agencies];
+}
   try {
     const userId  = req.session.userId;
     const profile = await db.users.getPublicProfile(userId);
@@ -223,11 +295,14 @@ router.get("/relevant-grants", async (req, res) => {
     const sort   = req.query.sort === "close_date" ? "close_date" : "fetched_at";
     const search = req.query.search || null;
 
+    const relevantAgencies = getRelevantAgencies(terms);
+
     const { total, rows } = await db.opportunities.findRelevant(terms, {
       sort,
       limit,
       offset,
-      search,  // ← pass search through
+      search,
+      agencies: relevantAgencies,  // ← pass matched agencies
     });
 
     const ids    = rows.map((r) => String(r._id || r.id));
@@ -241,6 +316,7 @@ router.get("/relevant-grants", async (req, res) => {
       interest_count:  counts[String(r._id || r.id)] || 0,
       user_interested: mySet.has(String(r._id || r.id)),
       matched_terms:   getMatchedTerms(r, terms), // which terms matched
+      matched_agency:  getMatchedAgency(r, relevantAgencies), // which agency matched
     }));
 
     res.json({
@@ -250,6 +326,7 @@ router.get("/relevant-grants", async (req, res) => {
       pages:   Math.ceil(total / limit),
       results,
       terms,   // send back what terms were used
+      agencies: relevantAgencies, // send back what agencies were matched
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -265,6 +342,12 @@ function getMatchedTerms(grant, terms) {
   ].join(" ").toLowerCase();
 
   return terms.filter((t) => text.includes(t.toLowerCase()));
+}
+
+function getMatchedAgency(grant, agencies) {
+  if (!grant.agency) return null;
+  const agencyUpper = grant.agency.toUpperCase();
+  return agencies.find((a) => agencyUpper.includes(a)) || null;
 }
 
 module.exports = router;

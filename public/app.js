@@ -210,34 +210,64 @@ async function loadRelevantGrants(page) {
     }
 
     // Show which terms were matched
-    var termBadges = (data.terms || []).map(function(t) {
+    var matchedTerms    = data.terms    || [];
+    var matchedAgencies = data.agencies || [];
+
+    var termBadges = matchedTerms.map(function(t) {
       return '<span class="meta-chip keyword-chip">' + escHtml(t) + '</span>';
     }).join("");
 
-    feed.innerHTML =
-      '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;' +
-           'align-items:center;gap:8px">' +
-        '<span style="font-size:0.78rem;color:var(--muted)">Matched by:</span>' +
-        termBadges +
-      '</div>';
+    var agencyBadges = matchedAgencies.map(function(a) {
+      return '<span class="meta-chip agency-chip">' + escHtml(a) + '</span>';
+    }).join("");
+
+
+    var headerHtml = "";
+
+    if (termBadges) {
+      headerHtml +=
+        '<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;' +
+            'align-items:center;gap:8px">' +
+          '<span style="font-size:0.78rem;color:var(--muted)">Your keywords:</span>' +
+          termBadges +
+        '</div>';
+    }
+
+    if (agencyBadges) {
+      headerHtml +=
+        '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;' +
+            'align-items:center;gap:8px">' +
+          '<span style="font-size:0.78rem;color:var(--muted)">Matched agencies:</span>' +
+          agencyBadges +
+        '</div>';
+    }
+
+    feed.innerHTML = headerHtml;
 
     var totalPages = data.pages || 1;
     data.results.forEach(function(item) {
       var card = buildCard(item);
 
       // Add matched terms badge to card if available
-      if (item.matched_terms && item.matched_terms.length > 0) {
-        var meta = card.querySelector(".card-meta");
-        if (meta) {
-          var matchBadge      = document.createElement("span");
+      var meta = card.querySelector(".card-meta");
+      if (meta) {
+        if (item.matched_terms && item.matched_terms.length > 0) {
+          var matchBadge       = document.createElement("span");
           matchBadge.className = "meta-chip keyword-chip";
-          matchBadge.title    = "Matched your profile interests";
+          matchBadge.title     = "Matched your profile interests";
           matchBadge.textContent =
             "🎯 " + item.matched_terms.slice(0, 2).join(", ") +
             (item.matched_terms.length > 2
               ? " +" + (item.matched_terms.length - 2) + " more"
               : "");
           meta.appendChild(matchBadge);
+        } else if (item.matched_agency) {
+          // Grant matched via agency, not terms directly
+          var agencyBadge       = document.createElement("span");
+          agencyBadge.className = "meta-chip agency-chip";
+          agencyBadge.title     = "Included because " + item.matched_agency + " matches your profile";
+          agencyBadge.textContent = "🏢 " + item.matched_agency + " match";
+          meta.appendChild(agencyBadge);
         }
       }
 

@@ -587,6 +587,28 @@ async findRelevant(terms, filters = {}) {
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString().split("T")[0];
 
+  // Build term matching conditions
+  const termMatches = terms.map((term) => ({
+    $or: [
+      { title:   new RegExp(escapeRegex(term), "i") },
+      { summary: new RegExp(escapeRegex(term), "i") },
+      { agency:  new RegExp(escapeRegex(term), "i") },
+    ],
+  }));
+
+  // Build agency matching conditions
+  const agencyMatches = (filters.agencies || []).map((agency) => ({
+    agency: new RegExp(escapeRegex(agency), "i"),
+  }));
+
+  // Grant is relevant if:
+  // 1. It matches any of the user's terms (title/summary/agency)
+  // OR
+  // 2. It comes from a relevant agency
+  const relevanceCondition = agencyMatches.length > 0
+    ? { $or: [...termMatches, ...agencyMatches] }
+    : { $or: termMatches };
+
   const conditions = [
     // Not expired
     {
@@ -596,16 +618,8 @@ async findRelevant(terms, filters = {}) {
         { close_date: { $gte: todayStr } },
       ],
     },
-    // Match profile terms
-    {
-      $or: terms.map((term) => ({
-        $or: [
-          { title:   new RegExp(escapeRegex(term), "i") },
-          { summary: new RegExp(escapeRegex(term), "i") },
-          { agency:  new RegExp(escapeRegex(term), "i") },
-        ],
-      })),
-    },
+    // Relevant by terms OR agency
+    relevanceCondition,
   ];
 
   // Additional search filter on top of profile matching
