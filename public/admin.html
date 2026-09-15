@@ -236,9 +236,14 @@
 
         /* ── Username cell ── */
         var usernameCell =
-          "<td><strong>" + escHtml(u.username) + "</strong>" +
+        "<td>" +
+          "<span style='cursor:pointer;color:var(--accent);text-decoration:underline;" +
+                "text-underline-offset:2px;font-weight:600' " +
+                "onclick='viewUserProfile(\"" + u.id + "\")'>" +
+            escHtml(u.username) +
+          "</span>" +
           (isMe ? " <span style='color:var(--muted);font-size:0.75rem'>(you)</span>" : "") +
-          "</td>";
+        "</td>";
 
         /* ── Role cell ── */
         var roleClass    = u.role === "admin" ? "role-admin" : "role-user";
@@ -358,6 +363,191 @@
       });
     } catch(e) { return isoStr; }
   }
+  /* ── View User Profile ── */
+async function viewUserProfile(userId) {
+  var modal = document.getElementById("user-profile-modal");
+  var body  = document.getElementById("user-profile-modal-body");
+
+  body.innerHTML =
+    '<div class="loading"><div class="spinner"></div><span>Loading...</span></div>';
+  modal.classList.add("open");
+
+  try {
+    var res = await fetch("/api/users/" + userId);
+    var u   = await res.json();
+
+    if (!res.ok) throw new Error(u.error || "Failed to load profile");
+
+    var name     = u.display_name || u.username;
+    var initial  = name[0].toUpperCase();
+    var subtitle = [u.job_title, u.company, u.department].filter(Boolean).join(" · ");
+
+    body.innerHTML =
+      // Header
+      '<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;' +
+           'padding-bottom:16px;border-bottom:1px solid var(--border)">' +
+        '<div style="width:56px;height:56px;border-radius:50%;background:var(--surface2);' +
+             'border:1px solid var(--border);display:flex;align-items:center;' +
+             'justify-content:center;font-size:1.4rem;font-weight:700;color:var(--accent)">' +
+          escHtml(initial) +
+        '</div>' +
+        '<div>' +
+          '<div style="font-size:1.1rem;font-weight:700;display:flex;' +
+               'align-items:center;gap:8px">' +
+            escHtml(name) +
+            '<span class="role-badge ' + (u.role === "admin" ? "role-admin" : "role-user") + '">' +
+              escHtml(u.role) +
+            '</span>' +
+          '</div>' +
+          (subtitle
+            ? '<div style="font-size:0.85rem;color:var(--accent);margin-top:2px">' +
+                escHtml(subtitle) +
+              '</div>'
+            : "") +
+          '<div style="font-size:0.75rem;color:var(--muted);margin-top:2px">' +
+            '@' + escHtml(u.username) +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // Details grid
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">' +
+
+        (u.email
+          ? '<div>' +
+              '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+                   'text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Email</div>' +
+              '<a href="mailto:' + escHtml(u.email) + '" style="color:var(--accent);font-size:0.88rem">' +
+                escHtml(u.email) +
+              '</a>' +
+            '</div>'
+          : "") +
+
+        (u.phone
+          ? '<div>' +
+              '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+                   'text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Phone</div>' +
+              '<div style="font-size:0.88rem">' + escHtml(u.phone) + '</div>' +
+            '</div>'
+          : "") +
+
+        (u.location
+          ? '<div>' +
+              '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+                   'text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Location</div>' +
+              '<div style="font-size:0.88rem">📍 ' + escHtml(u.location) + '</div>' +
+            '</div>'
+          : "") +
+
+        '<div>' +
+          '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+               'text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Member Since</div>' +
+          '<div style="font-size:0.88rem">' + formatDate(u.created_at) + '</div>' +
+        '</div>' +
+
+      '</div>' +
+
+      // Bio
+      (u.bio
+        ? '<div style="margin-bottom:16px;padding:12px;background:var(--surface2);' +
+               'border-radius:var(--radius);font-size:0.85rem;color:var(--muted);' +
+               'line-height:1.6;font-style:italic">' +
+            escHtml(u.bio) +
+          '</div>'
+        : "") +
+
+      // Interests
+      (u.interests && u.interests.length > 0
+        ? '<div style="margin-bottom:12px">' +
+            '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+                 'text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">' +
+              'Research Interests' +
+            '</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+              u.interests.map(function(t) {
+                return '<span style="background:rgba(79,142,247,.15);' +
+                  'border:1px solid rgba(79,142,247,.35);color:var(--accent);' +
+                  'border-radius:20px;padding:2px 10px;font-size:0.75rem;font-weight:600">' +
+                  escHtml(t) + '</span>';
+              }).join("") +
+            '</div>' +
+          '</div>'
+        : "") +
+
+      // Expertise
+      (u.expertise && u.expertise.length > 0
+        ? '<div style="margin-bottom:12px">' +
+            '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+                 'text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">' +
+              'Skills & Expertise' +
+            '</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+              u.expertise.map(function(t) {
+                return '<span style="background:rgba(62,207,142,.15);' +
+                  'border:1px solid rgba(62,207,142,.35);color:var(--green);' +
+                  'border-radius:20px;padding:2px 10px;font-size:0.75rem;font-weight:600">' +
+                  escHtml(t) + '</span>';
+              }).join("") +
+            '</div>' +
+          '</div>'
+        : "") +
+
+      // Projects
+      (u.projects && u.projects.length > 0
+        ? '<div>' +
+            '<div style="font-size:0.72rem;color:var(--muted);font-weight:600;' +
+                 'text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">' +
+              'Recent Projects' +
+            '</div>' +
+            u.projects.map(function(p) {
+              return '<div style="background:var(--surface2);border:1px solid var(--border);' +
+                'border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">' +
+                '<div style="font-weight:600;font-size:0.88rem">' + escHtml(p.title) +
+                  (p.year ? ' <span style="color:var(--muted);font-weight:400;font-size:0.78rem">(' +
+                    escHtml(p.year) + ')</span>' : '') +
+                '</div>' +
+                (p.role ? '<div style="color:var(--accent);font-size:0.78rem;margin-top:2px">' +
+                  escHtml(p.role) + '</div>' : '') +
+                (p.description ? '<div style="color:var(--muted);font-size:0.82rem;margin-top:4px;' +
+                  'line-height:1.5">' + escHtml(p.description) + '</div>' : '') +
+                '</div>';
+            }).join("") +
+          '</div>'
+        : "");
+
+  } catch(err) {
+    body.innerHTML =
+      '<p style="color:var(--red);text-align:center;padding:24px">' +
+      '⚠️ Failed to load profile: ' + escHtml(err.message) + '</p>';
+  }
+}
+
+function closeUserProfileModal(event) {
+  if (!event || event.target === event.currentTarget) {
+    document.getElementById("user-profile-modal").classList.remove("open");
+  }
+}
+
+function escHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 </script>
+<!-- User Profile Modal -->
+<div class="modal-overlay" id="user-profile-modal" onclick="closeUserProfileModal(event)">
+  <div class="modal" style="max-width:560px">
+    <h2>
+      <span>👤 User Profile</span>
+      <button class="modal-close" onclick="closeUserProfileModal()">✕</button>
+    </h2>
+    <div id="user-profile-modal-body">
+      <div class="loading"><div class="spinner"></div><span>Loading...</span></div>
+    </div>
+  </div>
+</div>
   </body>
 </html>
