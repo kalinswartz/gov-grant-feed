@@ -200,7 +200,7 @@ router.get("/users/:id", async (req, res) => {
 
 router.get("/relevant-grants", async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId  = req.session.userId;
     const profile = await db.users.getPublicProfile(userId);
 
     if (!profile) return res.status(404).json({ error: "User not found" });
@@ -213,7 +213,7 @@ router.get("/relevant-grants", async (req, res) => {
       return res.json({
         total:   0,
         results: [],
-        missing: true, // tell frontend to show setup prompt
+        missing: true,
       });
     }
 
@@ -221,11 +221,13 @@ router.get("/relevant-grants", async (req, res) => {
     const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const offset = (page - 1) * limit;
     const sort   = req.query.sort === "close_date" ? "close_date" : "fetched_at";
+    const search = req.query.search || null;
 
     const { total, rows } = await db.opportunities.findRelevant(terms, {
       sort,
       limit,
       offset,
+      search,  // ← pass search through
     });
 
     const ids    = rows.map((r) => String(r._id || r.id));

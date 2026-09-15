@@ -3,10 +3,11 @@ const axios = require("axios");
 const SEARCH2_URL = "https://api.grants.gov/v1/api/search2";
 
 const KEYWORDS = [
-  "transportation research",
-  "highway research",
-  "roadway safety",
-  "traffic safety",
+  "transportation",
+  "highway",
+  "safety",
+  "roadway",
+  "traffic",
   "transportation infrastructure",
   "transportation planning",
   "freight transportation",
@@ -25,8 +26,9 @@ const KEYWORDS = [
   "ITS",
   "traffic operations",
   "work zone safety",
-  "pedestrian safety",
-  "bicycle safety",
+  "pedestrian",
+  "bicycle",
+  "cyclist",
   "pavement research",
   "bridge safety",
   "transportation security",
@@ -61,13 +63,10 @@ const BLOCKED_AGENCY_CODES = new Set([
   "AHRQ",       // Agency for Healthcare Research
   "IHS",        // Indian Health Service
   "USDA",       // Agriculture
-  "ED",         // Education
   "DOE",        // Energy (not transport)
   "EPA",        // Environmental Protection
-  "HUD",        // Housing & Urban Development
   "DOL",        // Labor
   "DOJ",        // Justice
-  "DOS",        // State
   "DOI",        // Interior
   "TREAS",      // Treasury
   "SBA",        // Small Business Admin
@@ -148,6 +147,7 @@ const TRANSPORT_TITLE_KEYWORDS = [
   "DOT",
   "USDOT",
   "TxDOT",
+  "safety",
 ];
 
 async function fetchWithRetry(payload, label, maxRetries = 4) {

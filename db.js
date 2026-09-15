@@ -596,7 +596,7 @@ async findRelevant(terms, filters = {}) {
         { close_date: { $gte: todayStr } },
       ],
     },
-    // Match ANY of the user's interest/expertise terms
+    // Match profile terms
     {
       $or: terms.map((term) => ({
         $or: [
@@ -607,6 +607,34 @@ async findRelevant(terms, filters = {}) {
       })),
     },
   ];
+
+  // Additional search filter on top of profile matching
+  if (filters.search) {
+    const searchTerms = filters.search
+      .split(/[,;]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    if (searchTerms.length === 1) {
+      conditions.push({
+        $or: [
+          { title:   new RegExp(escapeRegex(searchTerms[0]), "i") },
+          { summary: new RegExp(escapeRegex(searchTerms[0]), "i") },
+          { agency:  new RegExp(escapeRegex(searchTerms[0]), "i") },
+        ],
+      });
+    } else {
+      conditions.push({
+        $or: searchTerms.map((term) => ({
+          $or: [
+            { title:   new RegExp(escapeRegex(term), "i") },
+            { summary: new RegExp(escapeRegex(term), "i") },
+            { agency:  new RegExp(escapeRegex(term), "i") },
+          ],
+        })),
+      });
+    }
+  }
 
   const finalQuery = { $and: conditions };
 

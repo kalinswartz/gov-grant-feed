@@ -461,45 +461,76 @@
 
       <!-- Research Interests Card -->
 <div class="profile-card">
-  <h3>🔬 Research Interests</h3>
+  <h3>🔬 Research Interests & Expertise</h3>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+    Select from the list or type your own. These are used to automatically
+    find relevant grants for you in the <strong>🎯 Relevant Grants</strong> tab.
+  </p>
+
   <div id="interests-alert" class="alert"></div>
+
+  <!-- Research Interests -->
   <div class="form-group">
-    <label>Interests
-      <span style="color:var(--muted);font-weight:400;text-transform:none;
-                   letter-spacing:0"> — press Enter or comma to add</span>
-    </label>
-    <div class="tag-input-wrap" id="interests-wrap" onclick="focusTagInput('interests-input')">
-      <!-- tags rendered here -->
+    <label>Research Interests</label>
+
+    <!-- Dropdown picker -->
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <select id="interests-dropdown"
+        style="flex:1;background:var(--surface2);border:1px solid var(--border);
+               border-radius:var(--radius);color:var(--text);padding:8px 12px;
+               font-size:0.88rem;outline:none"
+        onchange="addFromDropdown('interests')">
+        <option value="">— Select an interest to add —</option>
+      </select>
+    </div>
+
+    <!-- Tag input -->
+    <div class="tag-input-wrap" id="interests-wrap"
+         onclick="focusTagInput('interests-input')">
       <input
         type="text"
         id="interests-input"
         class="tag-text-input"
-        placeholder="e.g. Traffic Safety"
+        placeholder="Or type a custom interest + Enter"
         onkeydown="handleTagKeydown(event, 'interests')"
+        oninput="filterDropdown('interests')"
       />
     </div>
-    <div class="tag-hint">Up to 8 interests</div>
+    <div class="tag-hint">Up to 20 interests · select from list or type your own</div>
   </div>
 
-  <div class="form-group" style="margin-top:16px">
-    <label>Skills & Expertise
-      <span style="color:var(--muted);font-weight:400;text-transform:none;
-                   letter-spacing:0"> — press Enter or comma to add</span>
-    </label>
-    <div class="tag-input-wrap" id="expertise-wrap" onclick="focusTagInput('expertise-input')">
-      <!-- tags rendered here -->
+  <!-- Skills & Expertise -->
+  <div class="form-group" style="margin-top:20px">
+    <label>Skills & Expertise</label>
+
+    <!-- Dropdown picker -->
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <select id="expertise-dropdown"
+        style="flex:1;background:var(--surface2);border:1px solid var(--border);
+               border-radius:var(--radius);color:var(--text);padding:8px 12px;
+               font-size:0.88rem;outline:none"
+        onchange="addFromDropdown('expertise')">
+        <option value="">— Select a skill to add —</option>
+      </select>
+    </div>
+
+    <!-- Tag input -->
+    <div class="tag-input-wrap" id="expertise-wrap"
+         onclick="focusTagInput('expertise-input')">
       <input
         type="text"
         id="expertise-input"
         class="tag-text-input"
-        placeholder="e.g. Traffic Simulation"
+        placeholder="Or type a custom skill + Enter"
         onkeydown="handleTagKeydown(event, 'expertise')"
+        oninput="filterDropdown('expertise')"
       />
     </div>
-    <div class="tag-hint">Up to 10 skills</div>
+    <div class="tag-hint">Up to 20 skills · select from list or type your own</div>
   </div>
 
   <div class="form-actions">
+    <button class="btn-outline" onclick="resetTags()">Reset</button>
     <button class="btn-primary" id="save-tags-btn" onclick="saveTags()">
       Save Interests & Expertise
     </button>
@@ -559,6 +590,71 @@
       var originalProfile = {};
       var interestTags = [];
       var expertiseTags = [];
+      /* ── Predefined interests and expertise ── */
+var PRESET_INTERESTS = [
+  "Transportation",
+  "Highway",
+  "Safety",
+  "Traffic",
+  "Pedestrian",
+  "Bicycle",
+  "Transit",
+  "Rail",
+  "Aviation",
+  "Maritime",
+  "Freight",
+  "Truck",
+  "Mobility",
+  "Autonomous",
+  "Connected",
+  "Infrastructure",
+  "Pavement",
+  "Bridge",
+  "Corridor",
+  "Intersection",
+  "Signal",
+  "Planning",
+  "Equity",
+  "Rural",
+  "Urban",
+  "Multimodal",
+  "Pipeline",
+  "Port",
+  "Ferry",
+  "Security",
+];
+
+var PRESET_EXPERTISE = [
+  "Simulation",
+  "Modeling",
+  "GIS",
+  "Data",
+  "Statistics",
+  "Engineering",
+  "Policy",
+  "Design",
+  "Operations",
+  "Maintenance",
+  "Construction",
+  "Safety",
+  "Planning",
+  "Analysis",
+  "Software",
+  "Sensors",
+  "Communications",
+  "Machine Learning",
+  "Automation",
+  "Visualization",
+  "Surveying",
+  "Testing",
+  "Compliance",
+  "Management",
+  "Procurement",
+  "Finance",
+  "Outreach",
+  "Training",
+  "Writing",
+];
 
       /* ── Init ── */
       (async function() {
@@ -628,6 +724,7 @@
           renderTags("interests", interestTags);
           renderTags("expertise", expertiseTags);
           renderProjects(data.projects || []);
+          populateDropdowns();
 
         } catch(err) {
           showAlert("profile-alert", "Failed to load profile: " + err.message, "error");
@@ -985,22 +1082,24 @@ function removeTag(type, index) {
 
   function renderTags(type, tags) {
     var wrap  = document.getElementById(type + "-wrap");
-    var input = document.getElementById(type + "-input");
+  var input = document.getElementById(type + "-input");
 
-    // Remove existing tag elements (keep the input)
-    var existing = wrap.querySelectorAll(".tag");
-    existing.forEach(function(el) { el.remove(); });
+  var existing = wrap.querySelectorAll(".tag");
+  existing.forEach(function(el) { el.remove(); });
 
-    // Add tags before input
-    tags.forEach(function(tag, idx) {
-      var span       = document.createElement("span");
-      span.className = "tag";
-      span.innerHTML =
-        escHtml(tag) +
-        '<button class="tag-remove" onclick="removeTag(\'' + type + '\', ' + idx + ')" ' +
-          'title="Remove">×</button>';
-      wrap.insertBefore(span, input);
-    });
+  tags.forEach(function(tag, idx) {
+    var span       = document.createElement("span");
+    span.className = "tag";
+    span.innerHTML =
+      escHtml(tag) +
+      '<button class="tag-remove" onclick="removeTag(\'' + type + '\', ' + idx + ')" ' +
+        'title="Remove">×</button>';
+    wrap.insertBefore(span, input);
+  });
+
+  // Refresh dropdown to remove newly added tags from options
+  var presets = type === "interests" ? PRESET_INTERESTS : PRESET_EXPERTISE;
+  populateDropdown(type + "-dropdown", presets, tags);
   }
 
   /* ── Save Interests + Expertise ── */
@@ -1225,6 +1324,98 @@ function removeTag(type, index) {
       renderProjects(parsedResumeData.projects);
     }
   };
+
+  /* ── Populate dropdowns on load ── */
+function populateDropdowns() {
+  populateDropdown("interests-dropdown", PRESET_INTERESTS, interestTags);
+  populateDropdown("expertise-dropdown", PRESET_EXPERTISE, expertiseTags);
+}
+
+function populateDropdown(dropdownId, presets, currentTags) {
+  var select = document.getElementById(dropdownId);
+  if (!select) return;
+
+  // Save current selection
+  var current = select.value;
+
+  // Clear all except first option
+  while (select.options.length > 1) select.remove(1);
+
+  // Add presets that aren't already added as tags
+  presets.forEach(function(p) {
+    var alreadyAdded = currentTags.some(function(t) {
+      return t.toLowerCase() === p.toLowerCase();
+    });
+    if (!alreadyAdded) {
+      var opt   = document.createElement("option");
+      opt.value = p;
+      opt.textContent = p;
+      select.appendChild(opt);
+    }
+  });
+
+  // Restore selection if still valid
+  select.value = current;
+}
+
+/* ── Add tag from dropdown ── */
+function addFromDropdown(type) {
+  var select = document.getElementById(type + "-dropdown");
+  var val    = select.value;
+  if (!val) return;
+
+  var tags   = type === "interests" ? interestTags : expertiseTags;
+  var maxLen = 20;
+
+  if (tags.length >= maxLen) {
+    showAlert("interests-alert", "Maximum " + maxLen + " " + type + " allowed", "error");
+    select.value = "";
+    return;
+  }
+
+  if (!tags.some(function(t) { return t.toLowerCase() === val.toLowerCase(); })) {
+    tags.push(val);
+    if (type === "interests") interestTags = tags;
+    else                      expertiseTags = tags;
+    renderTags(type, tags);
+  }
+
+  // Reset dropdown and remove added option
+  select.value = "";
+  populateDropdown(type + "-dropdown",
+    type === "interests" ? PRESET_INTERESTS : PRESET_EXPERTISE,
+    tags
+  );
+}
+
+/* ── Filter dropdown as user types ── */
+function filterDropdown(type) {
+  var input  = document.getElementById(type + "-input");
+  var select = document.getElementById(type + "-dropdown");
+  var val    = (input.value || "").toLowerCase().trim();
+  var tags   = type === "interests" ? interestTags : expertiseTags;
+  var presets = type === "interests" ? PRESET_INTERESTS : PRESET_EXPERTISE;
+
+  // Clear options
+  while (select.options.length > 1) select.remove(1);
+
+  // Filter presets by what user is typing
+  var filtered = val
+    ? presets.filter(function(p) { return p.toLowerCase().includes(val); })
+    : presets;
+
+  filtered.forEach(function(p) {
+    var alreadyAdded = tags.some(function(t) {
+      return t.toLowerCase() === p.toLowerCase();
+    });
+    if (!alreadyAdded) {
+      var opt       = document.createElement("option");
+      opt.value     = p;
+      opt.textContent = p;
+      select.appendChild(opt);
+    }
+  });
+}
     </script>
   </body>
 </html>

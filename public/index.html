@@ -56,38 +56,66 @@
         </button>
       </div>
 
-      <!-- Controls -->
-      <div class="controls" id="controls-bar">
-        <div class="search-wrap">
-          <svg class="search-icon" width="16" height="16" fill="none"
-               stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8"/>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input type="text" id="search-input"
-                 placeholder="Search keywords, title, agency..."
-                 oninput="debouncedSearch()" />
-        </div>
+      <!-- Controls — main feed -->
+<div class="controls" id="controls-bar">
+  <div class="search-wrap">
+    <svg class="search-icon" width="16" height="16" fill="none"
+         stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="8"/>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+    <input type="text" id="search-input"
+           placeholder="Search e.g. safety, pedestrian; highway"
+           title="Separate multiple keywords with commas or semicolons"
+           oninput="debouncedSearch()" />
+  </div>
 
-        <div class="agency-wrap">
-          <select id="agency-filter" onchange="onAgencyDropdownChange()">
-            <option value="">All Agencies</option>
-          </select>
-        </div>
+  <div class="agency-wrap">
+    <select id="agency-filter" onchange="onAgencyDropdownChange()">
+      <option value="">All Agencies</option>
+    </select>
+  </div>
 
-        <select id="sort-select" onchange="loadFeed(1)">
-          <option value="fetched_at">Sort: Newest</option>
-          <option value="close_date">Sort: Closing Soon</option>
-        </select>
+  <select id="sort-select" onchange="loadFeed(1)">
+    <option value="fetched_at">Sort: Newest</option>
+    <option value="close_date">Sort: Closing Soon</option>
+  </select>
 
-        <select id="limit-select" onchange="loadFeed(1)">
-          <option value="10">10 / page</option>
-          <option value="20" selected>20 / page</option>
-          <option value="50">50 / page</option>
-        </select>
+  <select id="limit-select" onchange="loadFeed(1)">
+    <option value="10">10 / page</option>
+    <option value="20" selected>20 / page</option>
+    <option value="50">50 / page</option>
+  </select>
 
-        <button class="btn-outline btn-sm" onclick="clearFilters()">✕ Clear</button>
-      </div>
+  <button class="btn-outline btn-sm" onclick="clearFilters()">✕ Clear</button>
+</div>
+
+<!-- Controls — relevant grants tab -->
+<div class="controls" id="relevant-controls-bar" style="display:none">
+  <div class="search-wrap">
+    <svg class="search-icon" width="16" height="16" fill="none"
+         stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="8"/>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+    <input type="text" id="relevant-search-input"
+           placeholder="Filter relevant grants..."
+           oninput="debouncedRelevantSearch()" />
+  </div>
+
+  <select id="relevant-sort-select" onchange="loadRelevantGrants(1)">
+    <option value="fetched_at">Sort: Newest</option>
+    <option value="close_date">Sort: Closing Soon</option>
+  </select>
+
+  <select id="relevant-limit-select" onchange="loadRelevantGrants(1)">
+    <option value="10">10 / page</option>
+    <option value="20" selected>20 / page</option>
+    <option value="50">50 / page</option>
+  </select>
+
+  <button class="btn-outline btn-sm" onclick="clearRelevantSearch()">✕ Clear</button>
+</div>
 
       <!-- Feed -->
       <div id="feed">

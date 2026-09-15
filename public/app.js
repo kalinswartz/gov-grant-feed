@@ -136,19 +136,24 @@ function switchTab(tab) {
   relevantTab.classList.remove("tab-active");
   interestTab.classList.remove("tab-active");
 
+  var relevantControls = document.getElementById("relevant-controls-bar");
+
   if (tab === "feed") {
     feedTab.classList.add("tab-active");
-    controls.style.display = "";
+    controls.style.display         = "";
+    relevantControls.style.display = "none";
     loadFeed(1);
   } else if (tab === "relevant") {
     relevantTab.classList.add("tab-active");
-    controls.style.display = "none";
-    pagination.innerHTML   = "";
+    controls.style.display         = "none";
+    relevantControls.style.display = "";
+    pagination.innerHTML           = "";
     loadRelevantGrants(1);
   } else {
     interestTab.classList.add("tab-active");
-    controls.style.display = "none";
-    pagination.innerHTML   = "";
+    controls.style.display         = "none";
+    relevantControls.style.display = "none";
+    pagination.innerHTML           = "";
     loadMyInterests();
   }
 }
@@ -158,10 +163,16 @@ async function loadRelevantGrants(page) {
   page        = page || 1;
   currentPage = page;
 
-  var sort  = document.getElementById("sort-select").value;
-  var limit = document.getElementById("limit-select").value;
+  var sort   = document.getElementById("relevant-sort-select").value;
+  var limit  = document.getElementById("relevant-limit-select").value;
+  var search = document.getElementById("relevant-search-input").value.trim();
 
   var params = new URLSearchParams({ page: page, limit: limit, sort: sort });
+  if (search) params.set("search", search);
+
+  // Update search input active state
+  document.getElementById("relevant-search-input")
+    .classList.toggle("filter-active", !!search);
 
   var feed = document.getElementById("feed");
   feed.innerHTML =
@@ -1025,4 +1036,20 @@ function closeUserProfileModal(event) {
   if (!event || event.target === event.currentTarget) {
     document.getElementById("user-profile-modal").classList.remove("open");
   }
+}
+
+var relevantSearchTimer = null;
+
+function debouncedRelevantSearch() {
+  clearTimeout(relevantSearchTimer);
+  relevantSearchTimer = setTimeout(function() {
+    loadRelevantGrants(1);
+  }, 400);
+}
+
+function clearRelevantSearch() {
+  document.getElementById("relevant-search-input").value = "";
+  document.getElementById("relevant-search-input").classList.remove("filter-active");
+  loadRelevantGrants(1);
+  showToast("Filters cleared", "");
 }

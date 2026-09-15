@@ -5,6 +5,22 @@ const PDFParser  = require("pdf2json");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const rateLimit = {}
 
+const PRESET_INTERESTS = [
+  "Transportation", "Highway", "Safety", "Traffic", "Pedestrian", "Bicycle",
+  "Transit", "Rail", "Aviation", "Maritime", "Freight", "Truck", "Mobility",
+  "Autonomous", "Connected", "Infrastructure", "Pavement", "Bridge", "Corridor",
+  "Intersection", "Signal", "Planning", "Equity", "Rural", "Urban", "Multimodal",
+  "Pipeline", "Port", "Ferry", "Security",
+];
+
+const PRESET_EXPERTISE = [
+  "Simulation", "Modeling", "GIS", "Data", "Statistics", "Engineering",
+  "Policy", "Design", "Operations", "Maintenance", "Construction", "Safety",
+  "Planning", "Analysis", "Software", "Sensors", "Communications",
+  "Machine Learning", "Automation", "Visualization", "Surveying", "Testing",
+  "Compliance", "Management", "Procurement", "Finance", "Outreach", "Training", "Writing",
+];
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const upload = multer({
@@ -108,8 +124,27 @@ router.post("/parse", upload.single("resume"), async (req, res) => {
       - phone          (phone number)
       - location       (city and state, e.g. "College Station, TX")
       - bio            (write a 2-3 sentence professional summary based on their experience, max 400 chars)
-      - interests      (array of up to 8 research interests or professional interests as short strings)
-      - expertise      (array of up to 10 skills or areas of expertise as short strings)
+      - interests      (array of up to 8 research interests. Follow these rules:
+                        1. First pick matching items from this preferred list using exact spelling:
+                          Transportation, Highway, Safety, Traffic, Pedestrian, Bicycle,
+                          Transit, Rail, Aviation, Maritime, Freight, Truck, Mobility,
+                          Autonomous, Connected, Infrastructure, Pavement, Bridge, Corridor,
+                          Intersection, Signal, Planning, Equity, Rural, Urban, Multimodal,
+                          Pipeline, Port, Ferry, Security.
+                        2. If the resume shows clear interests NOT in the list above,
+                          add up to 3 short custom keywords (1-3 words max).
+                        3. Return a mix of preset + custom if needed.)
+
+      - expertise      (array of up to 10 skills or expertise areas. Follow these rules:
+                        1. First pick matching items from this preferred list using exact spelling:
+                          Simulation, Modeling, GIS, Data, Statistics, Engineering,
+                          Policy, Design, Operations, Maintenance, Construction, Safety,
+                          Planning, Analysis, Software, Sensors, Communications,
+                          Machine Learning, Automation, Visualization, Surveying, Testing,
+                          Compliance, Management, Procurement, Finance, Outreach, Training, Writing.
+                        2. If the resume shows clear skills NOT in the list above,
+                          add up to 3 short custom keywords (1-3 words max).
+                        3. Return a mix of preset + custom if needed.)
       - projects       (array of up to 3 most recent or relevant projects, each with:
                         title: project name
                         description: 1-2 sentence description, max 200 chars
@@ -163,11 +198,32 @@ safe.bio = String(parsed.bio || "").trim().slice(0, 500);
 
 // Sanitize arrays
 safe.interests = Array.isArray(parsed.interests)
-  ? parsed.interests.map((s) => String(s).trim()).filter(Boolean).slice(0, 8)
+  ? parsed.interests
+      .map((s) => String(s).trim().slice(0, 50))
+      .filter(Boolean)
+      .map((s) => {
+        // If it matches a preset, normalize to exact preset casing
+        const preset = PRESET_INTERESTS.find(
+          (p) => p.toLowerCase() === s.toLowerCase()
+        );
+        return preset || s; // return preset if matched, else keep custom
+      })
+      .filter((s, idx, arr) => arr.indexOf(s) === idx) // remove duplicates
+      .slice(0, 8)
   : [];
 
 safe.expertise = Array.isArray(parsed.expertise)
-  ? parsed.expertise.map((s) => String(s).trim()).filter(Boolean).slice(0, 10)
+  ? parsed.expertise
+      .map((s) => String(s).trim().slice(0, 50))
+      .filter(Boolean)
+      .map((s) => {
+        const preset = PRESET_EXPERTISE.find(
+          (p) => p.toLowerCase() === s.toLowerCase()
+        );
+        return preset || s;
+      })
+      .filter((s, idx, arr) => arr.indexOf(s) === idx)
+      .slice(0, 10)
   : [];
 
 safe.projects = Array.isArray(parsed.projects)
